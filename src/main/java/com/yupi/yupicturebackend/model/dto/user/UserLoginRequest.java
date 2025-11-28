@@ -6,19 +6,18 @@ import lombok.Data;
 import java.io.Serializable;
 
 @Data
-public class UserRegisterRequest implements Serializable {
+public class UserLoginRequest implements Serializable {
     @TableField(exist = false)
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 3191241716373120793L;
+
     /**
-     * 用户账号
+     * 账号
      */
     private String userAccount;
+
     /**
-     * 用户密码
+     * 密码
      */
     private String userPassword;
-    /**
-     * 确认密码
-     */
-    private String checkPassword;
 }
+
