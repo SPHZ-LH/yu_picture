@@ -7,7 +7,6 @@ import java.io.Serializable;
 
 @Data
 public class UserRegisterRequest implements Serializable {
-    @TableField(exist = false)
     private static final long serialVersionUID = 1L;
     /**
      * 用户账号

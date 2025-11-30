@@ -1,16 +1,18 @@
-package com.yupi.yupicturebackend.model.vo;
+package com.yupi.yupicturebackend.model.dto.user;
 
+import com.yupi.yupicturebackend.common.PageRequest;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.io.Serializable;
-import java.util.Date;
 
 /**
- * 登入用户视图（脱敏后的）
+ * 用户查询请求
  *
  */
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class LoginUserVO implements Serializable {
+public class UserQueryRequest extends PageRequest implements Serializable {
 
     private static final long serialVersionUID = 1L;
     /**
@@ -29,10 +31,6 @@ public class LoginUserVO implements Serializable {
      */
     private String userName;
 
-    /**
-     * 用户头像
-     */
-    private String userAvatar;
 
     /**
      * 用户简介
@@ -43,21 +41,5 @@ public class LoginUserVO implements Serializable {
      * 用户角色：user/admin
      */
     private String userRole;
-
-    /**
-     * 编辑时间
-     */
-    private Date editTime;
-
-    /**
-     * 创建时间
-     */
-    private Date createTime;
-
-    /**
-     * 更新时间
-     */
-    private Date updateTime;
-
 
 }
