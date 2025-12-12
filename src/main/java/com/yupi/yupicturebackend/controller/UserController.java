@@ -15,6 +15,7 @@ import com.yupi.yupicturebackend.model.entity.User;
 import com.yupi.yupicturebackend.model.vo.LoginUserVO;
 import com.yupi.yupicturebackend.model.vo.UserVO;
 import com.yupi.yupicturebackend.service.UserService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,6 +23,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/user")
 public class UserController {
@@ -68,7 +70,8 @@ public class UserController {
      */
     @GetMapping("/get/login")
     public BaseResponse<LoginUserVO> getLoginUser(HttpServletRequest request) {
-        LoginUserVO loginUserVO = userService.getLoginUser(request);
+        User loginUser = userService.getLoginUser(request);
+        LoginUserVO loginUserVO = userService.getLoginUserVO(loginUser);
         return ResultUtils.success(loginUserVO);
     }
 
@@ -174,12 +177,13 @@ public class UserController {
     @PostMapping("/list/page/vo")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<UserVO>> listUserVOByPage(@RequestBody UserQueryRequest userQueryRequest) {
-        ThrowUtils.throwIf(userQueryRequest == null, ErrorCode.PARAMS_ERROR);
+        ThrowUtils.throwIf(userQueryRequest == null, ErrorCode.PARAMS_ERROR, "查询请求发送失败");
         long current = userQueryRequest.getCurrent();
         long pageSize = userQueryRequest.getPageSize();
         Page<User> userPage = userService.page(new Page<>(current, pageSize), userService.getQueryWrapper(userQueryRequest));
         Page<UserVO> userVOPage = new Page<>(current, pageSize, userPage.getTotal());
         List<User> records = userPage.getRecords();
+        log.info(records.toString());
         List<UserVO> userVOList = userService.getUserVOList(records);
         userVOPage.setRecords(userVOList);
         return ResultUtils.success(userVOPage);

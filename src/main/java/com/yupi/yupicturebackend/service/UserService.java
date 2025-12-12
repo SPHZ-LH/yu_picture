@@ -49,9 +49,17 @@ public interface UserService extends IService<User> {
      * 获取当前登录用户信息
      *
      * @param request 前端发送的session
-     * @return 脱敏后的当前登入用户信息
+     * @return 当前登入用户信息
      */
-    LoginUserVO getLoginUser(HttpServletRequest request);
+    User getLoginUser(HttpServletRequest request);
+
+    /**
+     * 获取用户视图（脱敏）
+     *
+     * @param user 用户
+     * @return 用户视图
+     */
+    LoginUserVO getLoginUserVO(User user);
 
     /**
      * 用户注销
@@ -85,4 +93,11 @@ public interface UserService extends IService<User> {
      * @return 用户查询请求条件
      */
     QueryWrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest);
+
+    /**
+     * 是否为管理员
+     *
+     * @param user 登入用户
+     */
+    boolean isAdmin(User user);
 }
