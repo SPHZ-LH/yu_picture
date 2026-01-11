@@ -11,13 +11,11 @@ import com.yupi.yupicturebackend.constant.UserConstant;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
-import com.yupi.yupicturebackend.model.dto.picture.PictureEditRequest;
-import com.yupi.yupicturebackend.model.dto.picture.PictureQueryRequest;
-import com.yupi.yupicturebackend.model.dto.picture.PictureUpdateRequest;
-import com.yupi.yupicturebackend.model.dto.picture.PictureUploadRequest;
+import com.yupi.yupicturebackend.model.dto.picture.*;
 import com.yupi.yupicturebackend.model.entity.Picture;
 import com.yupi.yupicturebackend.model.entity.PictureTagCategory;
 import com.yupi.yupicturebackend.model.entity.User;
+import com.yupi.yupicturebackend.model.enums.PictureReviewStatusEnum;
 import com.yupi.yupicturebackend.model.vo.PictureVO;
 import com.yupi.yupicturebackend.service.PictureService;
 import com.yupi.yupicturebackend.service.UserService;
@@ -32,7 +30,8 @@ import java.util.Date;
 import java.util.List;
 
 @Slf4j
-@RestController("/picture")
+@RestController
+@RequestMapping("/picture")
 public class PictureController {
     @Resource
     private PictureService pictureService;
@@ -55,7 +54,7 @@ public class PictureController {
      * 根据id删除图片（上传用户和管理员）
      *
      * @param deleteRequest 删除请求
-     * @param request       前端传来的session
+     * @param request       前端传来的 session
      */
     @PostMapping("/delete")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
@@ -81,10 +80,11 @@ public class PictureController {
      * 更新图片（仅管理员）
      *
      * @param pictureUpdateRequest 跟新请求
+     * @param request              前端发送的 session
      */
     @PostMapping("/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Boolean> updatePicture(@RequestBody PictureUpdateRequest pictureUpdateRequest) {
+    public BaseResponse<Boolean> updatePicture(@RequestBody PictureUpdateRequest pictureUpdateRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(pictureUpdateRequest == null || pictureUpdateRequest.getId() <= 0, ErrorCode.PARAMS_ERROR, "更新请求发送失败");
         // 判断图片是否存在
         Long pictureID = pictureUpdateRequest.getId();
@@ -97,7 +97,10 @@ public class PictureController {
         picture.setTags(jsonStr);
         // 图片校验
         pictureService.validPicture(picture);
-
+        // 补充审核参数
+        User loginUser = userService.getLoginUser(request);
+        pictureService.fillReviewParams(picture, loginUser);
+        // 操作数据库
         boolean result = pictureService.updateById(picture);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
@@ -108,7 +111,7 @@ public class PictureController {
      * 编辑图片
      *
      * @param pictureEditRequest 编辑图片请求
-     * @param request            前端出来的session
+     * @param request            前端出来的 session
      */
     @PostMapping("/edit")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
@@ -132,6 +135,9 @@ public class PictureController {
 
         // 图片校验
         pictureService.validPicture(picture);
+
+        // 补充审核参数
+        pictureService.fillReviewParams(picture, loginUser);
 
         boolean result = pictureService.updateById(picture);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
@@ -165,6 +171,11 @@ public class PictureController {
         ThrowUtils.throwIf(pictureQueryRequest == null || pictureQueryRequest.getPageSize() > 20, ErrorCode.PARAMS_ERROR);
         int current = pictureQueryRequest.getCurrent();
         int pageSize = pictureQueryRequest.getPageSize();
+        // 限制爬虫
+        ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR);
+
+        // 普通用户默认只能查看已过审的数据
+        pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
         Page<Picture> picturePage = pictureService.page(new Page<>(current, pageSize), pictureService.getQueryWrapper(pictureQueryRequest));
         Page<PictureVO> pictureVOPage = pictureService.getPictureVOPage(picturePage);
         return ResultUtils.success(pictureVOPage);
@@ -173,7 +184,7 @@ public class PictureController {
     /**
      * 根据id获取图片视图（普通用户）
      *
-     * @param id 图片id
+     * @param id 图片 id
      * @return 图片视图
      */
     @GetMapping("/get/vo")
@@ -190,7 +201,7 @@ public class PictureController {
     /**
      * 根据id获取图片（管理员）
      *
-     * @param id 图片id
+     * @param id 图片 id
      * @return 图片
      */
     @GetMapping("/get")
@@ -203,6 +214,22 @@ public class PictureController {
 
         return ResultUtils.success(picture);
     }
+
+    /**
+     * 根据id审核图片（管理员）
+     *
+     * @param pictureReviewRequest 图片审核请求
+     * @param request              前端发送的 session
+     */
+    @PostMapping("/review")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> doPictureReview(@RequestBody PictureReviewRequest pictureReviewRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(pictureReviewRequest == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        pictureService.doPictureReview(pictureReviewRequest, loginUser);
+        return ResultUtils.success(true);
+    }
+
 
     @GetMapping("/tag_category")
     public BaseResponse<PictureTagCategory> listPictureTagCategory() {

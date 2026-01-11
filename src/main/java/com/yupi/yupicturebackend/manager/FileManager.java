@@ -43,7 +43,7 @@ public class FileManager {
      */
     public UploadPictureResult uploadPictureSteam(MultipartFile multipartFile, String uploadPathPrefix) {
         // 校验图片
-        validPicture(multipartFile);
+        this.validPicture(multipartFile);
         // 图片上传地址
         String uuid = RandomUtil.randomString(16);
         String originFilename = multipartFile.getOriginalFilename();
@@ -88,7 +88,7 @@ public class FileManager {
      */
     public UploadPictureResult uploadPicture(MultipartFile multipartFile, String uploadPathPrefix) {
         // 校验图片
-        validPicture(multipartFile);
+        this.validPicture(multipartFile);
         // 图片上传地址
         String uuid = RandomUtil.randomString(16);
         String originFilename = multipartFile.getOriginalFilename();
