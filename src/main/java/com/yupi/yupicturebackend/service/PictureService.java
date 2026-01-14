@@ -9,7 +9,6 @@ import com.yupi.yupicturebackend.model.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yupi.yupicturebackend.model.entity.User;
 import com.yupi.yupicturebackend.model.vo.PictureVO;
-import org.springframework.web.multipart.MultipartFile;
 
 /**
  * @author SPHZ
@@ -22,12 +21,12 @@ public interface PictureService extends IService<Picture> {
      * 上传图片
      * request 请求为 null 则为上传，否则为修改
      *
-     * @param multipartFile        需要上传的图片
+     * @param inputSoures          输入源
      * @param pictureUploadRequest 图片上传请求
      * @param loginUser            登入用户
      * @return 图片视图
      */
-    PictureVO uploadPicture(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser);
+    PictureVO uploadPicture(Object inputSoures, PictureUploadRequest pictureUploadRequest, User loginUser);
 
     /**
      * 获取查询条件
