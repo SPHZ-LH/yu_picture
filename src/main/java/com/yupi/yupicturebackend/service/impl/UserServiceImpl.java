@@ -55,7 +55,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 2.账号重复
         QueryWrapper<User> wrapper = new QueryWrapper<User>().eq("userAccount", userAccount);
         User queryUser = this.baseMapper.selectOne(wrapper);
-        ObjectUtil.isEmpty(queryUser);
         if (ObjectUtil.isNotNull(queryUser)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号已存在");
         }

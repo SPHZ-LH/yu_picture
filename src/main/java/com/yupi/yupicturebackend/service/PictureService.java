@@ -3,12 +3,13 @@ package com.yupi.yupicturebackend.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.yupicturebackend.model.dto.picture.PictureQueryRequest;
+import com.yupi.yupicturebackend.model.dto.picture.PictureReviewRequest;
+import com.yupi.yupicturebackend.model.dto.picture.PictureUploadByBatchRequest;
 import com.yupi.yupicturebackend.model.dto.picture.PictureUploadRequest;
 import com.yupi.yupicturebackend.model.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yupi.yupicturebackend.model.entity.User;
 import com.yupi.yupicturebackend.model.vo.PictureVO;
-import org.springframework.web.multipart.MultipartFile;
 
 /**
  * @author SPHZ
@@ -21,12 +22,21 @@ public interface PictureService extends IService<Picture> {
      * 上传图片
      * request 请求为 null 则为上传，否则为修改
      *
-     * @param multipartFile        需要上传的图片
+     * @param inputSoures          输入源
      * @param pictureUploadRequest 图片上传请求
      * @param loginUser            登入用户
      * @return 图片视图
      */
-    PictureVO uploadPicture(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser);
+    PictureVO uploadPicture(Object inputSoures, PictureUploadRequest pictureUploadRequest, User loginUser);
+
+    /**
+     * 批量抓取和创建图片
+     *
+     * @param pictureUploadByBatchRequest 批量抓取图片请求
+     * @param loginUser                   登入用户
+     * @return 成功创建的图片数
+     */
+    Integer uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, User loginUser);
 
     /**
      * 获取查询条件
@@ -66,4 +76,20 @@ public interface PictureService extends IService<Picture> {
      * @param picture 图片
      */
     void validPicture(Picture picture);
+
+    /**
+     * 图片审核
+     *
+     * @param pictureReviewRequest 图片审核请求
+     * @param loginUser            登入用户
+     */
+    void doPictureReview(PictureReviewRequest pictureReviewRequest, User loginUser);
+
+    /**
+     * 根据权限填充图片审核参数
+     *
+     * @param picture   图片
+     * @param loginUser 登入用户
+     */
+    void fillReviewParams(Picture picture, User loginUser);
 }

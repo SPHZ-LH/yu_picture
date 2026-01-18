@@ -40,7 +40,7 @@ public interface UserService extends IService<User> {
      *
      * @param userAccount  用户账户
      * @param userPassword 用户密码
-     * @param request      前端发送的session
+     * @param request      前端发送的 session
      * @return 脱敏后的用户信息
      */
     LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request);
@@ -48,7 +48,7 @@ public interface UserService extends IService<User> {
     /**
      * 获取当前登录用户信息
      *
-     * @param request 前端发送的session
+     * @param request 前端发送的 session
      * @return 当前登入用户信息
      */
     User getLoginUser(HttpServletRequest request);
@@ -64,7 +64,7 @@ public interface UserService extends IService<User> {
     /**
      * 用户注销
      *
-     * @param request 前端发送的session
+     * @param request 前端发送的 session
      * @return 是否成功
      */
     boolean userLogout(HttpServletRequest request);
