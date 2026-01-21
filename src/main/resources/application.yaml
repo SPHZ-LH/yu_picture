@@ -3,7 +3,23 @@ server:
   servlet:
     context-path: /api
 
+# 日志具体配置 - Logback生效
+logging:
+  # 控制台日志输出格式【核心：必须带%clr() 才会有颜色】
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n"
+  # 可选：配置日志级别（比如让debug日志也显示）
+  level:
+    root: INFO
+    com:
+      yourpackage: DEBUG # 你的业务包路径
 spring:
+  # SpringBoot 日志核心配置 - 开启彩色日志
+  output:
+    ansi:
+      enabled: ALWAYS
+      # ansi颜色编码支持，默认就是ALWAYS，无需额外配置
+      console-available: true
   application:
     name: yu-picture-backend
   datasource:
@@ -15,7 +31,14 @@ spring:
     active: local
   servlet:
     multipart:
-          max-file-size: 10MB
+      max-file-size: 10MB
+  # redis 配置
+  redis:
+    database: 0
+    host: 192.168.88.130
+    password: sphz0361
+    port: 6379
+    timeout: 5000
 mybatis-plus:
   configuration:
     # MyBatis 配置

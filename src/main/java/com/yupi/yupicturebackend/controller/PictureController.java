@@ -63,6 +63,14 @@ public class PictureController {
         return ResultUtils.success(pictureVO);
     }
 
+    /**
+     *
+     * 通过Url批量上传图片（仅管理员）
+     *
+     * @param pictureUploadByBatchRequest Url批量上传图片请求
+     * @param request                     前端发送的 session
+     * @return 上传图片的数量
+     */
     @PostMapping("/upload/batch")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Integer> uploadPictureByBatch(@RequestBody PictureUploadByBatchRequest pictureUploadByBatchRequest, HttpServletRequest request) {
@@ -70,6 +78,20 @@ public class PictureController {
         User loginUser = userService.getLoginUser(request);
         int uploadCount = pictureService.uploadPictureByBatch(pictureUploadByBatchRequest, loginUser);
         return ResultUtils.success(uploadCount);
+    }
+
+    /**
+     * 根据查询条件查询图片视图列表（缓存）
+     */
+    @PostMapping("/list/page/vo/cache")
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    public BaseResponse<Page<PictureVO>> listPictureVOByPageWithCache(@RequestBody PictureQueryRequest pictureQueryRequest) {
+        // 限制爬虫
+        ThrowUtils.throwIf(pictureQueryRequest.getPageSize() > 20, ErrorCode.PARAMS_ERROR);
+        // 普通用户默认只能查看已过审的数据
+        pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
+        Page<PictureVO> pictureVOPage = pictureService.listPictureVOByPageWithCache(pictureQueryRequest);
+        return ResultUtils.success(pictureVOPage);
     }
 
 

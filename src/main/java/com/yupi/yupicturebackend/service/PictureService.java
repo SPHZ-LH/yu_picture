@@ -92,4 +92,12 @@ public interface PictureService extends IService<Picture> {
      * @param loginUser 登入用户
      */
     void fillReviewParams(Picture picture, User loginUser);
+
+    /**
+     * 根据查询条件查询图片视图列表（缓存）
+     *
+     * @param pictureQueryRequest 图片查询请求
+     * @return 图片视图列表
+     */
+    Page<PictureVO> listPictureVOByPageWithCache(PictureQueryRequest pictureQueryRequest);
 }
