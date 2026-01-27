@@ -5,6 +5,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -142,17 +143,25 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
             log.error("获取页面失败", e);
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取页面失败");
         }
-        /*Element div = document.getElementsByClass("dgControl").first();
-        if (ObjUtil.isNull(div)) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取元素失败");
-        }*/
-        Elements imgElementList = document.select("img.mimg");
+        // 选择所有 class=iusc的a标签（存储图片信息的核心标签）
+        Elements imgElementList = document.select("a.iusc");
         if (ObjUtil.isNull(imgElementList)) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取元素失败");
         }
         int uploadCount = 0;
+        // 遍历标签，解析JSON获取murl
         for (Element imgElement : imgElementList) {
-            String fileUrl = imgElement.attr("src");
+            // 获取a标签的m属性（JSON字符串）
+            String mAttr = imgElement.attr("m");
+            String fileUrl;
+            try {
+                // 解析JSON字符串，获取高清图链接murl
+                JSONObject jsonObj = JSONUtil.parseObj(mAttr);
+                fileUrl = jsonObj.getStr("murl");
+            } catch (Exception e) {
+                log.info("解析图片数据失败", e);
+                continue;
+            }
             if (StrUtil.isBlank(fileUrl)) {
                 log.info("当前链接为空，已跳过: {}", fileUrl);
                 continue;
