@@ -2,6 +2,10 @@ server:
   port: 8080
   servlet:
     context-path: /api
+    # cookie过期时间
+    session:
+      cookie:
+        max-age: 2592000
 
 # 日志具体配置 - Logback生效
 logging:
@@ -29,6 +33,7 @@ spring:
     password: sphz0361
   profiles:
     active: local
+  # 文件上传体积配置
   servlet:
     multipart:
       max-file-size: 10MB
@@ -39,6 +44,10 @@ spring:
     password: sphz0361
     port: 6379
     timeout: 5000
+  session:
+    store-type: redis
+    # session 30 天过期
+    timeout: 2592000
 mybatis-plus:
   configuration:
     # MyBatis 配置
