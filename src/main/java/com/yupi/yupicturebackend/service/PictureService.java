@@ -10,6 +10,9 @@ import com.yupi.yupicturebackend.model.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yupi.yupicturebackend.model.entity.User;
 import com.yupi.yupicturebackend.model.vo.PictureVO;
+import org.springframework.scheduling.annotation.Async;
+
+import java.util.List;
 
 /**
  * @author SPHZ
@@ -100,4 +103,20 @@ public interface PictureService extends IService<Picture> {
      * @return 图片视图列表
      */
     Page<PictureVO> listPictureVOByPageWithCache(PictureQueryRequest pictureQueryRequest);
+
+    /**
+     * 根据老图的url地址删除COS对象存储的图片
+     *
+     * @param oldPicture 老图
+     */
+    @Async
+    void clearPictureFile(Picture oldPicture);
+
+    /**
+     * 根据老图URL列表删除COS对象存储的图片
+     *
+     * @param listPicture 图片列表
+     */
+    @Async
+    void clearPictureFiles(List<Picture> listPicture);
 }

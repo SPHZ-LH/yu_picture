@@ -11,9 +11,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.benmanes.caffeine.cache.Cache;
+import com.qcloud.cos.model.DeleteObjectsRequest;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
+import com.yupi.yupicturebackend.manager.CosManager;
 import com.yupi.yupicturebackend.manager.upload.FilePictureUpload;
 import com.yupi.yupicturebackend.manager.upload.PictureUploadTemplate;
 import com.yupi.yupicturebackend.manager.upload.UrlPictureUpload;
@@ -38,6 +40,7 @@ import org.jsoup.select.Elements;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
@@ -74,6 +77,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
     @Resource
     private Cache<String, String> localCache;
 
+    @Resource
+    private CosManager cosManager;
+
     @Override
     public PictureVO uploadPicture(Object inputSoures, PictureUploadRequest pictureUploadRequest, User loginUser) {
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH_ERROR, "用户未登入");
@@ -88,6 +94,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
             ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
             // 仅本人或管理员可编辑
             ThrowUtils.throwIf(!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser), ErrorCode.NO_AUTH_ERROR);
+            // 清空老图片
+            this.clearPictureFile(oldPicture);
         }
 
         // 上传图片，得到信息
@@ -386,6 +394,66 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         valueOps.set(cacheKey, cacheValue, 5, TimeUnit.MINUTES);
         return pictureVOPage;
     }
+
+    @Async
+    @Override
+    public void clearPictureFile(Picture oldPicture) {
+        // 判断该图片是否被多条记录使用
+        String pictureUrl = oldPicture.getUrl();
+        long count = this.lambdaQuery().eq(Picture::getUrl, pictureUrl).count();
+        // 有不止一条记录用到了该图片，不清理
+        if (count > 1) {
+            return;
+        }
+        // FIXME 注意，这里的 url 包含了域名，实际上只要传 key 值（存储路径）就够了
+        String key = pictureUrl.substring(pictureUrl.indexOf("public/"));
+        cosManager.deleteObject(key);
+        // 清理缩略图
+        String thumbnailUrl = oldPicture.getThumbnailUrl();
+        if (StrUtil.isNotBlank(thumbnailUrl)) {
+            cosManager.deleteObject(thumbnailUrl.substring(thumbnailUrl.indexOf("public/")));
+        }
+        log.info("图片删除成功，id = {}", oldPicture.getId());
+    }
+
+    @Async
+    @Override
+    public void clearPictureFiles(List<Picture> listPicture) {
+        if (listPicture == null || listPicture.isEmpty()) {
+            return;
+        }
+
+        // 1.1 判断该图片是否被多条记录使用
+        // 统计每个图片的使用次数
+        Map<String, Long> pictureUsageCount = listPicture.stream()
+                .collect(Collectors.groupingBy(
+                        Picture::getUrl, // 假设有getFileKey()方法获取图片唯一标识
+                        Collectors.counting()
+                ));
+
+        // 1.2 有多条记录的图片排除集合（只保留单次使用的图片）
+        List<Picture> picturesToDelete = listPicture.stream()
+                .filter(picture -> pictureUsageCount.get(picture.getUrl()) == 1)
+                .distinct() // 去重，确保每个图片只处理一次
+                .collect(Collectors.toList());
+
+        // 2. list类型转换为KeyVersion
+        List<DeleteObjectsRequest.KeyVersion> keyList = picturesToDelete.stream()
+                .map(picture -> new DeleteObjectsRequest.KeyVersion(
+                        picture.getUrl().substring(picture.getUrl().indexOf("public/"))
+                ))
+                .collect(Collectors.toList());
+        List<DeleteObjectsRequest.KeyVersion> thumbnailUrlList = picturesToDelete.stream()
+                .map(picture -> new DeleteObjectsRequest.KeyVersion(
+                        picture.getThumbnailUrl().substring(picture.getThumbnailUrl().indexOf("public/"))
+                ))
+                .collect(Collectors.toList());
+        // 3.1清除图片
+        cosManager.deleteObjects(keyList);
+        // 3.2清除缩略图
+        cosManager.deleteObjects(thumbnailUrlList);
+    }
+
 }
 
 

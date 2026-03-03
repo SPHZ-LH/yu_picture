@@ -115,6 +115,7 @@ public class PictureController {
         String userRole = loginUser.getUserRole();
         if (picture.getUserId().equals(loginUser.getId()) || UserConstant.ADMIN_ROLE.equals(userRole)) {
             boolean result = pictureService.removeById(id);
+            pictureService.clearPictureFile(picture);
             ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
             return ResultUtils.success(true);
         }
@@ -122,7 +123,7 @@ public class PictureController {
     }
 
     /**
-     * 更新图片（仅管理员）
+     * 更新图片信息（仅管理员）
      *
      * @param pictureUpdateRequest 跟新请求
      * @param request              前端发送的 session

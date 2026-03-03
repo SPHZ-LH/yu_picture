@@ -2,6 +2,7 @@ package com.yupi.yupicturebackend.manager;
 
 import cn.hutool.core.io.FileUtil;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.exception.CosClientException;
 import com.qcloud.cos.model.*;
 import com.qcloud.cos.model.ciModel.persistence.PicOperations;
 import com.yupi.yupicturebackend.config.CosClientConfig;
@@ -55,7 +56,7 @@ public class CosManager {
         compressRule.setFileId(webpKey);
         rules.add(compressRule);
         // 缩略图处理，仅对 > 20 KB 的图片生成缩略图
-        if (file.length() > 2 * 1024) {
+        if (file.length() > 20 * 1024) {
             PicOperations.Rule thumbnailRule = new PicOperations.Rule();
             thumbnailRule.setBucket(cosClientConfig.getBucket());
             String thumbnailKey = FileUtil.mainName(key) + "_thumbnail." + FileUtil.getSuffix(key);
@@ -112,6 +113,25 @@ public class CosManager {
         return cosClient.getObject(getObjectRequest);
     }
 
+    /**
+     * 删除对象
+     *
+     * @param key 文件 key
+     */
+    public void deleteObject(String key) throws CosClientException {
+        cosClient.deleteObject(cosClientConfig.getBucket(), key);
+    }
+
+    /**
+     * 批量删除对象
+     *
+     * @param keyList 文件列表 keyList
+     */
+    public void deleteObjects(List<DeleteObjectsRequest.KeyVersion> keyList) throws CosClientException {
+        DeleteObjectsRequest deleteObjectsRequest = new DeleteObjectsRequest(cosClientConfig.getBucket());
+        deleteObjectsRequest.setKeys(keyList);
+        cosClient.deleteObjects(deleteObjectsRequest);
+    }
 
 }
 
