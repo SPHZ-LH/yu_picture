@@ -3,8 +3,7 @@ CREATE DATABASE IF NOT EXISTS yu_picture;
 -- 切换数据库
 USE yu_picture;
 -- 创建图库表
-CREATE TABLE IF NOT EXISTS picture
-(
+CREATE TABLE IF NOT EXISTS picture (
     id           bigint AUTO_INCREMENT COMMENT 'id' PRIMARY KEY,
     url          varchar(512)                       NOT NULL COMMENT '图片 url',
     name         varchar(128)                       NOT NULL COMMENT '图片名称',

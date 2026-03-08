@@ -14,10 +14,12 @@ import com.yupi.yupicturebackend.exception.ThrowUtils;
 import com.yupi.yupicturebackend.model.dto.picture.*;
 import com.yupi.yupicturebackend.model.entity.Picture;
 import com.yupi.yupicturebackend.model.entity.PictureTagCategory;
+import com.yupi.yupicturebackend.model.entity.Space;
 import com.yupi.yupicturebackend.model.entity.User;
 import com.yupi.yupicturebackend.model.enums.PictureReviewStatusEnum;
 import com.yupi.yupicturebackend.model.vo.PictureVO;
 import com.yupi.yupicturebackend.service.PictureService;
+import com.yupi.yupicturebackend.service.SpaceService;
 import com.yupi.yupicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -37,6 +39,8 @@ public class PictureController {
     private PictureService pictureService;
     @Resource
     private UserService userService;
+    @Resource
+    private SpaceService spaceService;
 
 
     /**
@@ -83,6 +87,7 @@ public class PictureController {
     /**
      * 根据查询条件查询图片视图列表（缓存）
      */
+    @Deprecated
     @PostMapping("/list/page/vo/cache")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
     public BaseResponse<Page<PictureVO>> listPictureVOByPageWithCache(@RequestBody PictureQueryRequest pictureQueryRequest) {
@@ -104,28 +109,15 @@ public class PictureController {
     @PostMapping("/delete")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
     public BaseResponse<Boolean> deletePicture(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
-        ThrowUtils.throwIf(deleteRequest == null || deleteRequest.getId() <= 0, ErrorCode.PARAMS_ERROR, "删除请求发送失败");
-        // 判断图片是否存在
-        Long id = deleteRequest.getId();
-        Picture picture = pictureService.getById(id);
-        ThrowUtils.throwIf(picture == null, ErrorCode.NOT_FOUND_ERROR);
-
-        // 判断是否为上传用户或管理员
-        User loginUser = userService.getLoginUser(request);
-        String userRole = loginUser.getUserRole();
-        if (picture.getUserId().equals(loginUser.getId()) || UserConstant.ADMIN_ROLE.equals(userRole)) {
-            boolean result = pictureService.removeById(id);
-            pictureService.clearPictureFile(picture);
-            ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-            return ResultUtils.success(true);
-        }
-        throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+        ThrowUtils.throwIf(deleteRequest == null, ErrorCode.PARAMS_ERROR, "删除请求发送失败");
+        pictureService.deletePicture(deleteRequest.getId(), userService.getLoginUser(request));
+        return ResultUtils.success(true);
     }
 
     /**
      * 更新图片信息（仅管理员）
      *
-     * @param pictureUpdateRequest 跟新请求
+     * @param pictureUpdateRequest 更新请求
      * @param request              前端发送的 session
      */
     @PostMapping("/update")
@@ -162,31 +154,8 @@ public class PictureController {
     @PostMapping("/edit")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
     public BaseResponse<Boolean> editPicture(@RequestBody PictureEditRequest pictureEditRequest, HttpServletRequest request) {
-        ThrowUtils.throwIf(pictureEditRequest == null || pictureEditRequest.getId() <= 0, ErrorCode.PARAMS_ERROR, "编辑请求发送失败");
-        // 判断图片是否存在
-        Long pictureId = pictureEditRequest.getId();
-        Picture oldPicture = pictureService.getById(pictureId);
-        ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
-        // 判断是否为上传图片用户或管理员
-        User loginUser = userService.getLoginUser(request);
-        Long loginUserId = loginUser.getId();
-        Long userId = oldPicture.getUserId();
-        ThrowUtils.throwIf(!userId.equals(loginUserId) && !userService.isAdmin(loginUser), ErrorCode.NO_AUTH_ERROR);
-
-        // 关联数据
-        Picture picture = new Picture();
-        BeanUtil.copyProperties(pictureEditRequest, picture);
-        picture.setTags(JSONUtil.toJsonStr(pictureEditRequest.getTags()));
-        picture.setEditTime(new Date());
-
-        // 图片校验
-        pictureService.validPicture(picture);
-
-        // 补充审核参数
-        pictureService.fillReviewParams(picture, loginUser);
-
-        boolean result = pictureService.updateById(picture);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        ThrowUtils.throwIf(pictureEditRequest == null, ErrorCode.PARAMS_ERROR, "编辑请求发送失败");
+        pictureService.editPicture(pictureEditRequest, userService.getLoginUser(request));
         return ResultUtils.success(true);
     }
 
@@ -213,15 +182,30 @@ public class PictureController {
      * @return 图片视图列表
      */
     @PostMapping("/list/page/vo")
-    public BaseResponse<Page<PictureVO>> listPictureVOByPage(@RequestBody PictureQueryRequest pictureQueryRequest) {
+    public BaseResponse<Page<PictureVO>> listPictureVOByPage(@RequestBody PictureQueryRequest pictureQueryRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(pictureQueryRequest == null || pictureQueryRequest.getPageSize() > 20, ErrorCode.PARAMS_ERROR);
         int current = pictureQueryRequest.getCurrent();
         int pageSize = pictureQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR);
 
-        // 普通用户默认只能查看已过审的数据
-        pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
+        // 空间权限校验
+        Long spaceId = pictureQueryRequest.getSpaceId();
+        // 公开图库
+        if (spaceId == null) {
+            // 普通用户默认只能查看已过审的公开数据
+            pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
+            pictureQueryRequest.setNullSpaceId(true);
+        } else {
+            // 私有空间
+            User loginUser = userService.getLoginUser(request);
+            Space space = spaceService.getById(spaceId);
+            ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
+            if (!loginUser.getId().equals(space.getUserId())) {
+                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "没有空间权限");
+            }
+        }
+
         Page<Picture> picturePage = pictureService.page(new Page<>(current, pageSize), pictureService.getQueryWrapper(pictureQueryRequest));
         Page<PictureVO> pictureVOPage = pictureService.getPictureVOPage(picturePage);
         return ResultUtils.success(pictureVOPage);
@@ -234,11 +218,17 @@ public class PictureController {
      * @return 图片视图
      */
     @GetMapping("/get/vo")
-    public BaseResponse<PictureVO> getPictureVOById(@RequestParam long id) {
-
-        ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<PictureVO> getPictureVOById(@RequestParam long id, HttpServletRequest request) {
+        // 查询数据库
         Picture picture = pictureService.getById(id);
         ThrowUtils.throwIf(picture == null, ErrorCode.NOT_FOUND_ERROR);
+        // 空间权限校验
+        Long spaceId = picture.getSpaceId();
+        if (spaceId != null) {
+            User loginUser = userService.getLoginUser(request);
+            pictureService.checkPictureAuth(loginUser, picture);
+        }
+
         PictureVO pictureVO = pictureService.getPictureVO(picture);
         return ResultUtils.success(pictureVO);
 
