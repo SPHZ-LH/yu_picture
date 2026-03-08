@@ -2,10 +2,7 @@ package com.yupi.yupicturebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.yupi.yupicturebackend.model.dto.picture.PictureQueryRequest;
-import com.yupi.yupicturebackend.model.dto.picture.PictureReviewRequest;
-import com.yupi.yupicturebackend.model.dto.picture.PictureUploadByBatchRequest;
-import com.yupi.yupicturebackend.model.dto.picture.PictureUploadRequest;
+import com.yupi.yupicturebackend.model.dto.picture.*;
 import com.yupi.yupicturebackend.model.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.yupi.yupicturebackend.model.entity.User;
@@ -40,6 +37,22 @@ public interface PictureService extends IService<Picture> {
      * @return 成功创建的图片数
      */
     Integer uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, User loginUser);
+
+    /**
+     * 根据图片id删除图片
+     *
+     * @param pictureId 图片id
+     * @param loginUser 登入用户
+     */
+    void deletePicture(long pictureId, User loginUser);
+
+    /**
+     * 根据图片id编辑图片信息
+     *
+     * @param pictureEditRequest 图片编辑请求
+     * @param loginUser          登入用户
+     */
+    void editPicture(PictureEditRequest pictureEditRequest, User loginUser);
 
     /**
      * 获取查询条件
@@ -119,4 +132,6 @@ public interface PictureService extends IService<Picture> {
      */
     @Async
     void clearPictureFiles(List<Picture> listPicture);
+
+    void checkPictureAuth(User loginUser, Picture picture);
 }

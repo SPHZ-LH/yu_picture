@@ -3,8 +3,7 @@ CREATE DATABASE IF NOT EXISTS yu_picture;
 -- 切换数据库
 USE yu_picture;
 -- 创建用户表
-CREATE TABLE IF NOT EXISTS user
-(
+CREATE TABLE IF NOT EXISTS user (
     id           bigint AUTO_INCREMENT COMMENT 'id' PRIMARY KEY,
     userAccount  varchar(256)                           NOT NULL COMMENT '账号',
     userPassword varchar(512)                           NOT NULL COMMENT '密码',
@@ -19,3 +18,4 @@ CREATE TABLE IF NOT EXISTS user
     UNIQUE KEY uk_userAccount (userAccount),
     INDEX idx_userName (userName)
 ) COMMENT '用户' COLLATE = utf8mb4_unicode_ci;
+
