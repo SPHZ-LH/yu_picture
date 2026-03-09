@@ -11,12 +11,14 @@ import com.yupi.yupicturebackend.constant.UserConstant;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
+import com.yupi.yupicturebackend.model.dto.space.SpaceAddRequest;
 import com.yupi.yupicturebackend.model.dto.user.*;
 import com.yupi.yupicturebackend.model.entity.Picture;
 import com.yupi.yupicturebackend.model.entity.User;
 import com.yupi.yupicturebackend.model.vo.LoginUserVO;
 import com.yupi.yupicturebackend.model.vo.UserVO;
 import com.yupi.yupicturebackend.service.PictureService;
+import com.yupi.yupicturebackend.service.SpaceService;
 import com.yupi.yupicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -36,6 +38,9 @@ public class UserController {
     @Resource
     private PictureService pictureService;
 
+    @Resource
+    private SpaceService spaceService;
+
     /**
      * 用户注册
      *
@@ -49,6 +54,22 @@ public class UserController {
         String userPassword = userRegisterRequest.getUserPassword();
         String checkPassword = userRegisterRequest.getCheckPassword();
         long userId = userService.userRegister(userAccount, userPassword, checkPassword);
+        
+        // 用户注册成功后，自动创建默认空间
+        try {
+            User newUser = userService.getById(userId);
+            if (newUser != null) {
+                SpaceAddRequest spaceAddRequest = new SpaceAddRequest();
+                spaceAddRequest.setSpaceName("默认空间");
+                spaceAddRequest.setSpaceLevel(0); // 0-普通版
+                spaceService.addSpace(spaceAddRequest, newUser);
+                log.info("用户 {} 注册成功，已自动创建默认空间", userId);
+            }
+        } catch (Exception e) {
+            // 创建空间失败不影响注册流程，仅记录日志
+            log.error("用户 {} 注册成功，但自动创建空间失败: {}", userId, e.getMessage());
+        }
+        
         return ResultUtils.success(userId);
     }
 
