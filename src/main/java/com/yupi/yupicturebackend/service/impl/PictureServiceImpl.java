@@ -108,13 +108,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         }
 
         // 用于判断是新增还是更新图片
-        Long pictureId = null;
-        if (pictureUploadRequest != null) {
-            pictureId = pictureUploadRequest.getId();
-        }
+        Picture oldPicture = null;
+        Long pictureId = pictureUploadRequest.getId();
         // 如果是更新图片，需要校验图片是否存在
         if (pictureId != null) {
-            Picture oldPicture = this.getById(pictureId);
+            oldPicture = this.getById(pictureId);
             ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
             // 仅本人或管理员可编辑
             if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
@@ -158,7 +156,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         picture.setSpaceId(spaceId);
         // 判断上传请求是否有图片名称
         String picName = uploadPictureResult.getPicName();
-        if (pictureUploadRequest != null && StrUtil.isNotBlank(pictureUploadRequest.getPicName())) {
+        if (StrUtil.isNotBlank(pictureUploadRequest.getPicName())) {
             picName = pictureUploadRequest.getPicName();
         }
         picture.setName(picName);
@@ -172,19 +170,38 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         }
         // 开启事务
         Long finalSpaceId = spaceId;
-        transactionTemplate.execute(status -> {
+        Picture finalOldPicture = oldPicture;
+        // 使用事务模板执行数据库操作，并获取事务执行结果
+        Boolean execute = transactionTemplate.execute(status -> {
             boolean result = this.saveOrUpdate(picture);
             ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "图片上传失败");
             if (finalSpaceId != null) {
-                boolean update = spaceService.lambdaUpdate()
-                        .eq(Space::getId, finalSpaceId)
-                        .setSql("totalSize = totalSize + " + picture.getPicSize())
-                        .setSql("totalCount = totalCount + 1")
-                        .update();
-                ThrowUtils.throwIf(!update, ErrorCode.OPERATION_ERROR, "额度更新失败");
+                // 更新图片：先减去旧图片占用，再增加新图片占用
+                if (pictureId != null) {
+                    // 计算空间变化：新图片大小 - 旧图片大小
+                    long sizeChange = picture.getPicSize() - finalOldPicture.getPicSize();
+                    boolean update = spaceService.lambdaUpdate()
+                            .eq(Space::getId, finalSpaceId)
+                            .setSql("totalSize = totalSize + " + sizeChange)
+                            .update();
+                    ThrowUtils.throwIf(!update, ErrorCode.OPERATION_ERROR, "额度更新失败");
+                } else {
+                    // 新增图片：增加空间占用
+                    boolean update = spaceService.lambdaUpdate()
+                            .eq(Space::getId, finalSpaceId)
+                            .setSql("totalSize = totalSize + " + picture.getPicSize())
+                            .setSql("totalCount = totalCount + 1")
+                            .update();
+                    ThrowUtils.throwIf(!update, ErrorCode.OPERATION_ERROR, "额度更新失败");
+                }
             }
-            return picture;
+            return true;
         });
+
+        // 只有事务成功提交后（execute为ture），才异步清理旧图片文件
+        if (Boolean.TRUE.equals(execute) && pictureId != null) {
+            this.clearPictureFile(finalOldPicture);
+        }
 
         return this.getPictureVO(picture);
     }
@@ -590,7 +607,3 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
 
 
 }
-
-
-
-
