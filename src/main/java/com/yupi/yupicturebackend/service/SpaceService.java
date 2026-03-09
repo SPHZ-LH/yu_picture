@@ -16,6 +16,13 @@ import com.yupi.yupicturebackend.model.vo.SpaceVO;
  */
 public interface SpaceService extends IService<Space> {
 
+    /**
+     * 创建空间
+     *
+     * @param spaceAddRequest 创建空间请求
+     * @param loginUser       登入用户
+     * @return 空间id
+     */
     long addSpace(SpaceAddRequest spaceAddRequest, User loginUser);
 
     /**

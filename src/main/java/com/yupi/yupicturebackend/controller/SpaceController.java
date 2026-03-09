@@ -1,6 +1,7 @@
 package com.yupi.yupicturebackend.controller;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.yupicturebackend.annotation.AuthCheck;
 import com.yupi.yupicturebackend.common.BaseResponse;
 import com.yupi.yupicturebackend.common.DeleteRequest;
@@ -9,7 +10,9 @@ import com.yupi.yupicturebackend.constant.UserConstant;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
+import com.yupi.yupicturebackend.model.dto.space.SpaceAddRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceEditRequest;
+import com.yupi.yupicturebackend.model.dto.space.SpaceQueryRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceUpdateRequest;
 import com.yupi.yupicturebackend.model.entity.Space;
 import com.yupi.yupicturebackend.model.entity.SpaceLevel;
@@ -17,11 +20,9 @@ import com.yupi.yupicturebackend.model.entity.User;
 import com.yupi.yupicturebackend.model.enums.SpaceLevelEnum;
 import com.yupi.yupicturebackend.service.SpaceService;
 import com.yupi.yupicturebackend.service.UserService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -36,7 +37,9 @@ import java.util.stream.Collectors;
  * @createDate 2026-03-06
  * @description 空间接口
  */
-@RestController("")
+@Slf4j
+@RestController
+@RequestMapping("/space")
 public class SpaceController {
 
     @Resource
@@ -44,6 +47,22 @@ public class SpaceController {
     @Resource
     private UserService userService;
 
+    /**
+     * 创建空间
+     *
+     * @param spaceAddRequest 创建空间请求
+     * @param request         前端发送的session
+     */
+    @PostMapping("/add")
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    public BaseResponse<Boolean> addSpace(@RequestBody SpaceAddRequest spaceAddRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(spaceAddRequest == null, ErrorCode.PARAMS_ERROR, "增加请求发送失败");
+        long l = spaceService.addSpace(spaceAddRequest, userService.getLoginUser(request));
+        if (l > 0) {
+            return ResultUtils.success(true);
+        }
+        throw new BusinessException(ErrorCode.OPERATION_ERROR);
+    }
 
     /**
      * 根据id删除空间（空间创建人和管理员）
@@ -53,9 +72,9 @@ public class SpaceController {
      */
     @PostMapping("/delete")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
-    public BaseResponse<Boolean> deletePicture(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
+    public BaseResponse<Boolean> deleteSpace(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(deleteRequest == null || deleteRequest.getId() <= 0, ErrorCode.PARAMS_ERROR, "删除请求发送失败");
-        // 判断图片是否存在
+        // 判断空间是否存在
         Long id = deleteRequest.getId();
         Space space = spaceService.getById(id);
         ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR);
@@ -106,7 +125,7 @@ public class SpaceController {
      */
     @PostMapping("/edit")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
-    public BaseResponse<Boolean> editPicture(@RequestBody SpaceEditRequest spaceEditRequest, HttpServletRequest request) {
+    public BaseResponse<Boolean> editSpace(@RequestBody SpaceEditRequest spaceEditRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(spaceEditRequest == null || spaceEditRequest.getId() <= 0, ErrorCode.PARAMS_ERROR, "编辑请求发送失败");
         // 判断空间是否存在
         Long spaceId = spaceEditRequest.getId();
@@ -130,6 +149,39 @@ public class SpaceController {
         boolean result = spaceService.updateById(space);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
+    }
+
+    /**
+     * 根据查询条件查询空间列表（仅管理员）
+     *
+     * @param spaceQueryRequest 查询请求
+     * @return 空间列表
+     */
+    @PostMapping("/list/space")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Page<Space>> listSpaceByPage(@RequestBody SpaceQueryRequest spaceQueryRequest) {
+        ThrowUtils.throwIf(spaceQueryRequest == null, ErrorCode.PARAMS_ERROR);
+        int current = spaceQueryRequest.getCurrent();
+        int pageSize = spaceQueryRequest.getPageSize();
+        Page<Space> spacePage = spaceService.page(new Page<>(current, pageSize), spaceService.getQueryWrapper(spaceQueryRequest));
+        return ResultUtils.success(spacePage);
+    }
+
+    /**
+     * 根据id获取空间（管理员）
+     *
+     * @param id 空间 id
+     * @return 空间
+     */
+    @GetMapping("/get")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Space> getSpaceById(@RequestParam long id) {
+
+        ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
+        Space space = spaceService.getById(id);
+        ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR);
+
+        return ResultUtils.success(space);
     }
 
     /**
