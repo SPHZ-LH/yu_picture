@@ -11,6 +11,7 @@ import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
 import com.yupi.yupicturebackend.model.dto.space.SpaceAddRequest;
+import com.yupi.yupicturebackend.model.dto.space.SpaceAdminAddRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceEditRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceQueryRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceUpdateRequest;
@@ -62,13 +63,24 @@ public class SpaceController {
      */
     @PostMapping("/add")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
-    public BaseResponse<Boolean> addSpace(@RequestBody SpaceAddRequest spaceAddRequest, HttpServletRequest request) {
+    public BaseResponse<Long> addSpace(@RequestBody SpaceAddRequest spaceAddRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(spaceAddRequest == null, ErrorCode.PARAMS_ERROR, "增加请求发送失败");
-        long l = spaceService.addSpace(spaceAddRequest, userService.getLoginUser(request));
-        if (l > 0) {
-            return ResultUtils.success(true);
-        }
-        throw new BusinessException(ErrorCode.OPERATION_ERROR);
+        long spaceId = spaceService.addSpace(spaceAddRequest, userService.getLoginUser(request));
+        return ResultUtils.success(spaceId);
+    }
+
+    /**
+     * 管理员创建空间（可为指定用户创建）
+     *
+     * @param spaceAdminAddRequest 管理员创建空间请求
+     * @param request              前端发送的session
+     */
+    @PostMapping("/add/admin")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Long> adminAddSpace(@RequestBody SpaceAdminAddRequest spaceAdminAddRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(spaceAdminAddRequest == null, ErrorCode.PARAMS_ERROR, "增加请求发送失败");
+        long spaceId = spaceService.adminAddSpace(spaceAdminAddRequest, userService.getLoginUser(request));
+        return ResultUtils.success(spaceId);
     }
 
     /**
@@ -91,32 +103,28 @@ public class SpaceController {
         String userRole = loginUser.getUserRole();
         if (space.getUserId().equals(loginUser.getId()) || UserConstant.ADMIN_ROLE.equals(userRole)) {
             // 1. 查询空间内的所有图片
-            List<Picture> pictureList = pictureService.lambdaQuery()
-                    .eq(Picture::getSpaceId, id)
-                    .list();
-            
+            List<Picture> pictureList = pictureService.lambdaQuery().eq(Picture::getSpaceId, id).list();
+
             // 2. 在事务中执行删除操作，确保数据一致性
             Boolean transactionSuccess = transactionTemplate.execute(status -> {
                 // 2.1 删除空间
                 boolean result = spaceService.removeById(id);
                 ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "删除空间失败");
-                
+
                 // 2.2 删除空间内的所有图片（逻辑删除）
                 if (!pictureList.isEmpty()) {
-                    List<Long> pictureIds = pictureList.stream()
-                            .map(Picture::getId)
-                            .collect(Collectors.toList());
+                    List<Long> pictureIds = pictureList.stream().map(Picture::getId).collect(Collectors.toList());
                     boolean deletePicturesResult = pictureService.removeByIds(pictureIds);
                     ThrowUtils.throwIf(!deletePicturesResult, ErrorCode.OPERATION_ERROR, "删除空间图片失败");
                 }
                 return true;
             });
-            
+
             // 3. 只有事务成功后才异步清理图片文件，避免数据不一致
             if (Boolean.TRUE.equals(transactionSuccess) && !pictureList.isEmpty()) {
                 pictureService.clearPictureFiles(pictureList);
             }
-            
+
             return ResultUtils.success(true);
         }
         throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
@@ -222,12 +230,7 @@ public class SpaceController {
     @GetMapping("/list/level")
     public BaseResponse<List<SpaceLevel>> listSpaceLevel() {
         List<SpaceLevel> spaceLevelList = Arrays.stream(SpaceLevelEnum.values()) // 获取所有枚举
-                .map(spaceLevelEnum -> new SpaceLevel(
-                        spaceLevelEnum.getValue(),
-                        spaceLevelEnum.getText(),
-                        spaceLevelEnum.getMaxCount(),
-                        spaceLevelEnum.getMaxSize()))
-                .collect(Collectors.toList());
+                .map(spaceLevelEnum -> new SpaceLevel(spaceLevelEnum.getValue(), spaceLevelEnum.getText(), spaceLevelEnum.getMaxCount(), spaceLevelEnum.getMaxSize())).collect(Collectors.toList());
         return ResultUtils.success(spaceLevelList);
     }
 

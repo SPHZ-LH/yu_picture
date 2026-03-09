@@ -11,6 +11,7 @@ import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
 import com.yupi.yupicturebackend.model.dto.space.SpaceAddRequest;
+import com.yupi.yupicturebackend.model.dto.space.SpaceAdminAddRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceQueryRequest;
 import com.yupi.yupicturebackend.model.entity.Space;
 import com.yupi.yupicturebackend.model.entity.User;
@@ -73,6 +74,57 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
             Long newSpaceId = transactionTemplate.execute(status -> {
                 boolean exists = this.lambdaQuery().eq(Space::getUserId, userId).exists();
                 ThrowUtils.throwIf(exists, ErrorCode.OPERATION_ERROR, "每个用户仅能有一个私有空间");
+                // 写入数据库
+                boolean result = this.save(space);
+                ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+                // 返回新写入的数据 id
+                return space.getId();
+            });
+            // 返回结果是包装类，可以做一些处理
+            return Optional.ofNullable(newSpaceId).orElse(-1L);
+        }
+    }
+
+    @Override
+    public long adminAddSpace(SpaceAdminAddRequest spaceAdminAddRequest, User loginUser) {
+        // 权限校验：仅管理员可以为别人创建空间
+        ThrowUtils.throwIf(!userService.isAdmin(loginUser), ErrorCode.NO_AUTH_ERROR, "仅管理员可以为别人创建空间");
+        
+        // 参数校验
+        ThrowUtils.throwIf(spaceAdminAddRequest == null, ErrorCode.PARAMS_ERROR);
+        Long targetUserId = spaceAdminAddRequest.getUserId();
+        ThrowUtils.throwIf(targetUserId == null || targetUserId <= 0, ErrorCode.PARAMS_ERROR, "用户 id 不能为空");
+        
+        // 校验目标用户是否存在
+        User targetUser = userService.getById(targetUserId);
+        ThrowUtils.throwIf(targetUser == null, ErrorCode.NOT_FOUND_ERROR, "目标用户不存在");
+        
+        // 在此处将实体类和 DTO 进行转换
+        Space space = new Space();
+        BeanUtils.copyProperties(spaceAdminAddRequest, space);
+        
+        // 默认值
+        if (StrUtil.isBlank(spaceAdminAddRequest.getSpaceName())) {
+            space.setSpaceName("默认空间");
+        }
+        if (spaceAdminAddRequest.getSpaceLevel() == null) {
+            space.setSpaceLevel(SpaceLevelEnum.COMMON.getValue());
+        }
+        
+        // 填充数据
+        this.fillSpaceBySpaceLevel(space);
+        // 数据校验
+        this.validSpace(space, true);
+        
+        // 设置目标用户 id
+        space.setUserId(targetUserId);
+        
+        // 针对目标用户进行加锁
+        String lock = String.valueOf(targetUserId).intern();
+        synchronized (lock) {
+            Long newSpaceId = transactionTemplate.execute(status -> {
+                boolean exists = this.lambdaQuery().eq(Space::getUserId, targetUserId).exists();
+                ThrowUtils.throwIf(exists, ErrorCode.OPERATION_ERROR, "该用户已有私有空间");
                 // 写入数据库
                 boolean result = this.save(space);
                 ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
@@ -206,7 +258,3 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
 
 
 }
-
-
-
-

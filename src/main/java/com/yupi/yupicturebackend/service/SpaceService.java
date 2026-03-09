@@ -3,6 +3,7 @@ package com.yupi.yupicturebackend.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.yupicturebackend.model.dto.space.SpaceAddRequest;
+import com.yupi.yupicturebackend.model.dto.space.SpaceAdminAddRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceQueryRequest;
 import com.yupi.yupicturebackend.model.entity.Space;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -24,6 +25,15 @@ public interface SpaceService extends IService<Space> {
      * @return 空间id
      */
     long addSpace(SpaceAddRequest spaceAddRequest, User loginUser);
+
+    /**
+     * 管理员创建空间（可为指定用户创建）
+     *
+     * @param spaceAdminAddRequest 管理员创建空间请求
+     * @param loginUser            登入用户
+     * @return 空间id
+     */
+    long adminAddSpace(SpaceAdminAddRequest spaceAdminAddRequest, User loginUser);
 
     /**
      * 获取查询条件

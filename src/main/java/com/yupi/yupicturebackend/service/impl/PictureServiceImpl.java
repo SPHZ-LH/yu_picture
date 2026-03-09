@@ -523,7 +523,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         if (count > 1) {
             return;
         }
-        // FIXME 注意，这里的 url 包含了域名，实际上只要传 key 值（存储路径）就够了
+        // 注意，这里的 url 包含了域名，实际上只要传 key 值（存储路径）就够了
         String key = pictureUrl.substring(pictureUrl.indexOf("public/"));
         cosManager.deleteObject(key);
         // 清理缩略图
