@@ -14,14 +14,17 @@ import com.yupi.yupicturebackend.model.dto.space.SpaceAddRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceEditRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceQueryRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceUpdateRequest;
+import com.yupi.yupicturebackend.model.entity.Picture;
 import com.yupi.yupicturebackend.model.entity.Space;
 import com.yupi.yupicturebackend.model.entity.SpaceLevel;
 import com.yupi.yupicturebackend.model.entity.User;
 import com.yupi.yupicturebackend.model.enums.SpaceLevelEnum;
+import com.yupi.yupicturebackend.service.PictureService;
 import com.yupi.yupicturebackend.service.SpaceService;
 import com.yupi.yupicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -46,6 +49,10 @@ public class SpaceController {
     private SpaceService spaceService;
     @Resource
     private UserService userService;
+    @Resource
+    private PictureService pictureService;
+    @Resource
+    private TransactionTemplate transactionTemplate;
 
     /**
      * 创建空间
@@ -83,8 +90,33 @@ public class SpaceController {
         User loginUser = userService.getLoginUser(request);
         String userRole = loginUser.getUserRole();
         if (space.getUserId().equals(loginUser.getId()) || UserConstant.ADMIN_ROLE.equals(userRole)) {
-            boolean result = spaceService.removeById(id);
-            ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+            // 1. 查询空间内的所有图片
+            List<Picture> pictureList = pictureService.lambdaQuery()
+                    .eq(Picture::getSpaceId, id)
+                    .list();
+            
+            // 2. 在事务中执行删除操作，确保数据一致性
+            Boolean transactionSuccess = transactionTemplate.execute(status -> {
+                // 2.1 删除空间
+                boolean result = spaceService.removeById(id);
+                ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "删除空间失败");
+                
+                // 2.2 删除空间内的所有图片（逻辑删除）
+                if (!pictureList.isEmpty()) {
+                    List<Long> pictureIds = pictureList.stream()
+                            .map(Picture::getId)
+                            .collect(Collectors.toList());
+                    boolean deletePicturesResult = pictureService.removeByIds(pictureIds);
+                    ThrowUtils.throwIf(!deletePicturesResult, ErrorCode.OPERATION_ERROR, "删除空间图片失败");
+                }
+                return true;
+            });
+            
+            // 3. 只有事务成功后才异步清理图片文件，避免数据不一致
+            if (Boolean.TRUE.equals(transactionSuccess) && !pictureList.isEmpty()) {
+                pictureService.clearPictureFiles(pictureList);
+            }
+            
             return ResultUtils.success(true);
         }
         throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
