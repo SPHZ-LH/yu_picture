@@ -279,7 +279,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         Picture oldPicture = this.getById(pictureId);
         ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
         // 校验权限
-        checkPictureAuth(loginUser, oldPicture);
+        this.checkPictureAuth(loginUser, oldPicture);
         // 开启事务
         transactionTemplate.execute(status -> {
             // 操作数据库
@@ -300,6 +300,56 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         // 异步清理文件
         this.clearPictureFile(oldPicture);
 
+    }
+
+    @Override
+    public void deletePictureBatch(List<Long> pictureIds, User loginUser) {
+        ThrowUtils.throwIf(CollUtil.isEmpty(pictureIds), ErrorCode.PARAMS_ERROR, "图片id列表不能为空");
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH_ERROR);
+
+        // 查询所有要删除的图片
+        List<Picture> pictureList = this.listByIds(pictureIds);
+        ThrowUtils.throwIf(CollUtil.isEmpty(pictureList), ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+
+        // 校验每张图片的权限
+        for (Picture picture : pictureList) {
+            this.checkPictureAuth(loginUser, picture);
+        }
+
+        // 按空间分组统计需要释放的额度
+        Map<Long, List<Picture>> spaceGroupMap = pictureList.stream()
+                .filter(picture -> picture.getSpaceId() != null)
+                .collect(Collectors.groupingBy(Picture::getSpaceId));
+
+        // 开启事务批量删除
+        Boolean execute = transactionTemplate.execute(status -> {
+            // 批量删除图片
+            boolean result = this.removeByIds(pictureIds);
+            ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "批量删除失败");
+
+            // 仅当存在私有空间图片时，才批量释放各个空间的额度
+            for (Map.Entry<Long, List<Picture>> entry : spaceGroupMap.entrySet()) {
+                Long spaceId = entry.getKey();
+                List<Picture> pictures = entry.getValue();
+
+                // 计算该空间需要释放的总大小和数量
+                long totalSize = pictures.stream().mapToLong(Picture::getPicSize).sum();
+                long totalCount = pictures.size();
+
+                boolean update = spaceService.lambdaUpdate()
+                        .eq(Space::getId, spaceId)
+                        .setSql("totalSize = totalSize - " + totalSize)
+                        .setSql("totalCount = totalCount - " + totalCount)
+                        .update();
+                ThrowUtils.throwIf(!update, ErrorCode.OPERATION_ERROR, "空间额度更新失败");
+            }
+            return true;
+        });
+
+        // 只有事务成功提交后（execute 为 true），才异步批量清理文件
+        if (Boolean.TRUE.equals(execute)) {
+            this.clearPictureFiles(pictureList);
+        }
     }
 
     @Override
@@ -540,13 +590,24 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         if (count > 1) {
             return;
         }
+        String key;
         // 注意，这里的 url 包含了域名，实际上只要传 key 值（存储路径）就够了
-        String key = pictureUrl.substring(pictureUrl.indexOf("public/"));
+        if (oldPicture.getSpaceId() != null) {
+            key = pictureUrl.substring(pictureUrl.indexOf("space/"));
+        } else {
+            key = pictureUrl.substring(pictureUrl.indexOf("public/"));
+        }
         cosManager.deleteObject(key);
         // 清理缩略图
         String thumbnailUrl = oldPicture.getThumbnailUrl();
         if (StrUtil.isNotBlank(thumbnailUrl)) {
-            cosManager.deleteObject(thumbnailUrl.substring(thumbnailUrl.indexOf("public/")));
+            String thumbnailKey;
+            if (oldPicture.getSpaceId() != null) {
+                thumbnailKey = thumbnailUrl.substring(thumbnailUrl.indexOf("space/"));
+            } else {
+                thumbnailKey = thumbnailUrl.substring(thumbnailUrl.indexOf("public/"));
+            }
+            cosManager.deleteObject(thumbnailKey);
         }
         log.info("图片删除成功，id = {}", oldPicture.getId());
     }
@@ -562,7 +623,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         // 统计每个图片的使用次数
         Map<String, Long> pictureUsageCount = listPicture.stream()
                 .collect(Collectors.groupingBy(
-                        Picture::getUrl, // 假设有getFileKey()方法获取图片唯一标识
+                        Picture::getUrl,
                         Collectors.counting()
                 ));
 
@@ -572,21 +633,42 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
                 .distinct() // 去重，确保每个图片只处理一次
                 .collect(Collectors.toList());
 
-        // 2. list类型转换为KeyVersion
+        // 2. list类型转换为KeyVersion，根据 spaceId 判断使用 space/ 还是 public/
         List<DeleteObjectsRequest.KeyVersion> keyList = picturesToDelete.stream()
-                .map(picture -> new DeleteObjectsRequest.KeyVersion(
-                        picture.getUrl().substring(picture.getUrl().indexOf("public/"))
-                ))
+                .map(picture -> {
+                    String url = picture.getUrl();
+                    String key;
+                    if (picture.getSpaceId() != null) {
+                        key = url.substring(url.indexOf("space/"));
+                    } else {
+                        key = url.substring(url.indexOf("public/"));
+                    }
+                    return new DeleteObjectsRequest.KeyVersion(key);
+                })
                 .collect(Collectors.toList());
+        
         List<DeleteObjectsRequest.KeyVersion> thumbnailUrlList = picturesToDelete.stream()
-                .map(picture -> new DeleteObjectsRequest.KeyVersion(
-                        picture.getThumbnailUrl().substring(picture.getThumbnailUrl().indexOf("public/"))
-                ))
+                .filter(picture -> StrUtil.isNotBlank(picture.getThumbnailUrl()))
+                .map(picture -> {
+                    String thumbnailUrl = picture.getThumbnailUrl();
+                    String thumbnailKey;
+                    if (picture.getSpaceId() != null) {
+                        thumbnailKey = thumbnailUrl.substring(thumbnailUrl.indexOf("space/"));
+                    } else {
+                        thumbnailKey = thumbnailUrl.substring(thumbnailUrl.indexOf("public/"));
+                    }
+                    return new DeleteObjectsRequest.KeyVersion(thumbnailKey);
+                })
                 .collect(Collectors.toList());
+        
         // 3.1清除图片
-        cosManager.deleteObjects(keyList);
+        if (!keyList.isEmpty()) {
+            cosManager.deleteObjects(keyList);
+        }
         // 3.2清除缩略图
-        cosManager.deleteObjects(thumbnailUrlList);
+        if (!thumbnailUrlList.isEmpty()) {
+            cosManager.deleteObjects(thumbnailUrlList);
+        }
     }
 
     @Override

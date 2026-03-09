@@ -5,6 +5,7 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.yupicturebackend.annotation.AuthCheck;
 import com.yupi.yupicturebackend.common.BaseResponse;
+import com.yupi.yupicturebackend.common.BatchDeleteRequest;
 import com.yupi.yupicturebackend.common.DeleteRequest;
 import com.yupi.yupicturebackend.common.ResultUtils;
 import com.yupi.yupicturebackend.constant.UserConstant;
@@ -111,6 +112,21 @@ public class PictureController {
     public BaseResponse<Boolean> deletePicture(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(deleteRequest == null, ErrorCode.PARAMS_ERROR, "删除请求发送失败");
         pictureService.deletePicture(deleteRequest.getId(), userService.getLoginUser(request));
+        return ResultUtils.success(true);
+    }
+
+    /**
+     * 根据ids批量删除图片（上传用户和管理员）
+     *
+     * @param batchDeleteRequest 批量删除请求
+     * @param request            前端传来的 session
+     */
+    @PostMapping("/delete/batch")
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    public BaseResponse<Boolean> deletePictureBatch(@RequestBody BatchDeleteRequest batchDeleteRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(batchDeleteRequest == null || batchDeleteRequest.getIds() == null, ErrorCode.PARAMS_ERROR, "批量删除请求发送失败");
+        User loginUser = userService.getLoginUser(request);
+        pictureService.deletePictureBatch(batchDeleteRequest.getIds(), loginUser);
         return ResultUtils.success(true);
     }
 
