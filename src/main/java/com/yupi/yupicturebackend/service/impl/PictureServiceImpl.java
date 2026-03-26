@@ -37,6 +37,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -201,7 +202,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
 
         // 只有事务成功提交后（execute为ture），才异步清理旧图片文件
         if (Boolean.TRUE.equals(execute) && pictureId != null) {
-            this.clearPictureFile(finalOldPicture);
+            ((PictureService) AopContext.currentProxy()).clearPictureFile(finalOldPicture);
         }
 
         return this.getPictureVO(picture);
@@ -299,7 +300,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
             return true;
         });
         // 异步清理文件
-        this.clearPictureFile(oldPicture);
+        ((PictureService) AopContext.currentProxy()).clearPictureFile(oldPicture);
 
     }
 
@@ -349,7 +350,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
 
         // 只有事务成功提交后（execute 为 true），才异步批量清理文件
         if (Boolean.TRUE.equals(execute)) {
-            this.clearPictureFiles(pictureList);
+            ((PictureService) AopContext.currentProxy()).clearPictureFiles(pictureList);
         }
     }
 
