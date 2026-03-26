@@ -12,6 +12,11 @@ public class UploadPictureResult {
     private String url;
 
     /**
+     * 原图地址
+     */
+    private String originalUrl;
+
+    /**
      * 缩略图 url
      */
     private String thumbnailUrl;
@@ -52,4 +57,3 @@ public class UploadPictureResult {
      */
     private String picColor;
 }
-
