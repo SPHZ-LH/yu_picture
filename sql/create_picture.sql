@@ -41,3 +41,8 @@ ALTER TABLE picture
     -- 添加新列
     ADD COLUMN thumbnailUrl varchar(512) NULL COMMENT '缩略图 url';
 
+ALTER TABLE picture
+    ADD COLUMN picColor varchar(16) NULL COMMENT '图片主色调';
+
+ALTER TABLE picture
+    ADD COLUMN originalUrl varchar(512) NULL COMMENT '原图 url';

@@ -15,8 +15,8 @@ logging:
   # 可选：配置日志级别（比如让debug日志也显示）
   level:
     root: INFO
-    com:
-      yourpackage: DEBUG # 你的业务包路径
+    # 将你的业务包日志级别改为 INFO (如果是调试阶段可以改回 DEBUG) ---
+    com.yupi.yupicturebackend: INFO
 spring:
   # SpringBoot 日志核心配置 - 开启彩色日志
   output:
@@ -28,7 +28,7 @@ spring:
     name: yu-picture-backend
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/yu_picture
+    url: jdbc:mysql://localhost:3306/picture
     username: root
     password: sphz0361
   profiles:
@@ -36,7 +36,7 @@ spring:
   # 文件上传体积配置
   servlet:
     multipart:
-      max-file-size: 10MB
+      max-file-size: 20MB
   # redis 配置
   redis:
     database: 0
