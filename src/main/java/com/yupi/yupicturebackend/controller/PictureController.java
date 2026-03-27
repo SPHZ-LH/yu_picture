@@ -350,4 +350,36 @@ public class PictureController {
         pictureTagCategory.setCategoryList(categoryList);
         return ResultUtils.success(pictureTagCategory);
     }
+
+    /**
+     * 创建图片扩展任务
+     *
+     * @param createOutPaintingTaskRequest 图片扩展任务请求
+     * @param request                      前端发送的 session
+     * @return 任务ID
+     */
+    @PostMapping("/out_painting/create_task")
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    public BaseResponse<String> createOutPaintingTask(@RequestBody CreateOutPaintingTaskRequest createOutPaintingTaskRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(createOutPaintingTaskRequest == null, ErrorCode.PARAMS_ERROR, "请求参数不能为空");
+        User loginUser = userService.getLoginUser(request);
+        String taskId = pictureService.createOutPaintingTask(createOutPaintingTaskRequest, loginUser);
+        return ResultUtils.success(taskId);
+    }
+
+    /**
+     * 查询图片扩展任务结果
+     *
+     * @param taskId  任务ID
+     * @param request 前端发送的 session
+     * @return 扩展后的图片URL
+     */
+    @GetMapping("/out_painting/get_task_result")
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    public BaseResponse<String> getOutPaintingTaskResult(@RequestParam String taskId, HttpServletRequest request) {
+        ThrowUtils.throwIf(StrUtil.isBlank(taskId), ErrorCode.PARAMS_ERROR, "任务ID不能为空");
+        User loginUser = userService.getLoginUser(request);
+        String imageUrl = pictureService.getOutPaintingTaskResult(taskId, loginUser);
+        return ResultUtils.success(imageUrl);
+    }
 }

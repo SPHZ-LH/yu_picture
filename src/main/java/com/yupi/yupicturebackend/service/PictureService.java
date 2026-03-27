@@ -168,4 +168,22 @@ public interface PictureService extends IService<Picture> {
      */
     @Transactional(rollbackFor = Exception.class)
     void editPictureByBatch(PictureEditByBatchRequest pictureEditByBatchRequest, User loginUser);
+
+    /**
+     * 创建图片扩展任务
+     *
+     * @param createOutPaintingTaskRequest 图片扩展任务请求
+     * @param loginUser                    登入用户
+     * @return 任务ID
+     */
+    String createOutPaintingTask(CreateOutPaintingTaskRequest createOutPaintingTaskRequest, User loginUser);
+
+    /**
+     * 查询图片扩展任务结果
+     *
+     * @param taskId    任务ID
+     * @param loginUser 登入用户
+     * @return 扩展后的图片URL
+     */
+    String getOutPaintingTaskResult(String taskId, User loginUser);
 }

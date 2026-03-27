@@ -12,6 +12,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.qcloud.cos.model.DeleteObjectsRequest;
+import com.yupi.yupicturebackend.api.aliyunai.AliYunAiApi;
+import com.yupi.yupicturebackend.api.aliyunai.model.ImageOutPaintingRequest;
+import com.yupi.yupicturebackend.api.aliyunai.model.ImageOutPaintingResponse;
+import com.yupi.yupicturebackend.api.aliyunai.model.TaskResponse;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
@@ -87,6 +91,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
 
     @Resource
     private TransactionTemplate transactionTemplate;
+
+    @Resource
+    private AliYunAiApi aliYunAiApi;
 
     @Override
     public PictureVO uploadPicture(Object inputSoures, PictureUploadRequest pictureUploadRequest, User loginUser) {
@@ -807,5 +814,118 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         }
     }
 
+    @Override
+    public String createOutPaintingTask(CreateOutPaintingTaskRequest createOutPaintingTaskRequest, User loginUser) {
+        // 1. 参数校验
+        ThrowUtils.throwIf(createOutPaintingTaskRequest == null, ErrorCode.PARAMS_ERROR);
+        Long pictureId = createOutPaintingTaskRequest.getPictureId();
+        ThrowUtils.throwIf(pictureId == null || pictureId <= 0, ErrorCode.PARAMS_ERROR, "图片ID不能为空");
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH_ERROR);
+
+        // 2. 查询图片是否存在
+        Picture picture = this.getById(pictureId);
+        ThrowUtils.throwIf(picture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+
+        // 3. 校验图片权限
+        this.checkPictureAuth(loginUser, picture);
+
+        // 4. 构建阿里云AI请求参数
+        ImageOutPaintingRequest imageOutPaintingRequest = new ImageOutPaintingRequest();
+
+        // 设置模型
+        String model = createOutPaintingTaskRequest.getModel();
+        if (StrUtil.isBlank(model)) {
+            model = "image-out-painting";
+        }
+        imageOutPaintingRequest.setModel(model);
+
+        // 设置输入图片URL
+        ImageOutPaintingRequest.Input input = new ImageOutPaintingRequest.Input();
+        input.setImageUrl(picture.getUrl());
+        imageOutPaintingRequest.setInput(input);
+
+        // 设置参数 - 手动映射字段，因为字段名不一致
+        ImageOutPaintingRequest.Parameters parameters = new ImageOutPaintingRequest.Parameters();
+        parameters.setAngle(createOutPaintingTaskRequest.getAngle());
+        parameters.setOutputRatio(createOutPaintingTaskRequest.getOutputRatio());
+        
+        // 设置扩展参数，如果用户未提供，则使用默认值
+        // 优先级：用户传值 > 默认值（至少需要一个扩展参数）
+        Float xScale = createOutPaintingTaskRequest.getXScale();
+        Float yScale = createOutPaintingTaskRequest.getYScale();
+        Integer topOffset = createOutPaintingTaskRequest.getTopOffset();
+        Integer bottomOffset = createOutPaintingTaskRequest.getBottomOffset();
+        Integer leftOffset = createOutPaintingTaskRequest.getLeftOffset();
+        Integer rightOffset = createOutPaintingTaskRequest.getRightOffset();
+        
+        // 如果所有扩展参数都为null，设置默认的xScale和yScale（1.5倍扩展）
+        if (xScale == null && yScale == null && topOffset == null && bottomOffset == null 
+                && leftOffset == null && rightOffset == null) {
+            xScale = 1.5f;
+            yScale = 1.5f;
+            log.info("未提供扩展参数，使用默认值：xScale=1.5, yScale=1.5");
+        }
+        
+        parameters.setXScale(xScale);
+        parameters.setYScale(yScale);
+        parameters.setTopOffset(topOffset);
+        parameters.setBottomOffset(bottomOffset);
+        parameters.setLeftOffset(leftOffset);
+        parameters.setRightOffset(rightOffset);
+        parameters.setBestQuality(createOutPaintingTaskRequest.getBestQuality());
+        parameters.setLimitImageSize(createOutPaintingTaskRequest.getLimitImageSize());
+        parameters.setAddWatermark(createOutPaintingTaskRequest.getAddWatermark());
+        imageOutPaintingRequest.setParameters(parameters);
+
+        // 5. 调用阿里云AI接口创建任务
+        ImageOutPaintingResponse response = aliYunAiApi.createOutPaintingTask(imageOutPaintingRequest);
+
+        // 6. 返回任务ID
+        ThrowUtils.throwIf(response == null || response.getOutput() == null, ErrorCode.OPERATION_ERROR, "创建图片扩展任务失败");
+
+        String taskId = response.getOutput().getTaskId();
+        ThrowUtils.throwIf(StrUtil.isBlank(taskId), ErrorCode.OPERATION_ERROR, "任务ID获取失败");
+
+        log.info("创建图片扩展任务成功，图片ID: {}, 任务ID: {}", pictureId, taskId);
+        return taskId;
+    }
+
+    @Override
+    public String getOutPaintingTaskResult(String taskId, User loginUser) {
+        // 1. 参数校验
+        ThrowUtils.throwIf(StrUtil.isBlank(taskId), ErrorCode.PARAMS_ERROR, "任务ID不能为空");
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH_ERROR);
+
+        // 2. 调用阿里云AI接口查询任务结果
+        com.yupi.yupicturebackend.api.aliyunai.model.TaskResponse taskResponse = aliYunAiApi.getTaskResult(taskId);
+
+        // 3. 校验响应结果
+        ThrowUtils.throwIf(taskResponse == null, ErrorCode.OPERATION_ERROR, "查询任务结果失败");
+
+        // 4. 检查任务状态
+        TaskResponse.TaskStatus taskStatus = taskResponse.getTaskStatus();
+
+        if (TaskResponse.TaskStatus.SUCCEEDED.equals(taskStatus)) {
+            // 任务成功，返回图片URL
+            String outputImageUrl = taskResponse.getOutputImageUrl();
+            if (StrUtil.isBlank(outputImageUrl)) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "未获取到扩展后的图片URL");
+            }
+            log.info("图片扩展任务成功，任务ID: {}, 图片URL: {}", taskId, outputImageUrl);
+            return outputImageUrl;
+        } else if (TaskResponse.TaskStatus.FAILED.equals(taskStatus)) {
+            // 任务失败
+            log.error("图片扩展任务失败，任务ID: {}, 错误信息: {}", taskId, taskResponse.getMessage());
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "图片扩展任务失败: " + taskResponse.getMessage());
+        } else if (TaskResponse.TaskStatus.PENDING.equals(taskStatus) || TaskResponse.TaskStatus.RUNNING.equals(taskStatus)) {
+            // 任务进行中
+            log.info("图片扩展任务进行中，任务ID: {}, 状态: {}", taskId, taskStatus);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务正在处理中，请稍后查询");
+        } else {
+            // 其他状态（CANCELED、UNKNOWN等）
+            log.error("图片扩展任务异常，任务ID: {}, 状态: {}", taskId, taskStatus);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态异常: " + taskStatus);
+        }
+    }
 
 }
