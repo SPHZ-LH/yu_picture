@@ -2,6 +2,8 @@ package com.yupi.yupicturebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.yupi.yupicturebackend.api.aliyunai.model.ImageOutPaintingResponse;
+import com.yupi.yupicturebackend.api.aliyunai.model.TaskResponse;
 import com.yupi.yupicturebackend.model.dto.picture.*;
 import com.yupi.yupicturebackend.model.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -174,16 +176,16 @@ public interface PictureService extends IService<Picture> {
      *
      * @param createOutPaintingTaskRequest 图片扩展任务请求
      * @param loginUser                    登入用户
-     * @return 任务ID
+     * @return 图片扩展响应
      */
-    String createOutPaintingTask(CreateOutPaintingTaskRequest createOutPaintingTaskRequest, User loginUser);
+    ImageOutPaintingResponse createOutPaintingTask(CreateOutPaintingTaskRequest createOutPaintingTaskRequest, User loginUser);
 
     /**
      * 查询图片扩展任务结果
      *
      * @param taskId    任务ID
      * @param loginUser 登入用户
-     * @return 扩展后的图片URL
+     * @return 任务响应
      */
-    String getOutPaintingTaskResult(String taskId, User loginUser);
+    TaskResponse getOutPaintingTaskResult(String taskId, User loginUser);
 }

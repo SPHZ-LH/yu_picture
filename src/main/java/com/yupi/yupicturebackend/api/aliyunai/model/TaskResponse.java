@@ -1,147 +1,121 @@
 package com.yupi.yupicturebackend.api.aliyunai.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-/**
- * 任务响应实体类
- */
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class TaskResponse {
 
+    /**
+     * 请求唯一标识
+     */
     @JsonProperty("request_id")
-    private String requestId;        // 请求唯一标识
-
-    private Output output;           // 输出结果对象
-
-    // ==================== 便捷方法 ====================
+    private String requestId;
 
     /**
-     * 获取任务ID
+     * 输出信息
      */
-    public String getTaskId() {
-        return output != null ? output.getTaskId() : null;
-    }
+    private Output output;
 
     /**
-     * 获取任务状态
-     */
-    public TaskStatus getTaskStatus() {
-        return output != null ? output.getTaskStatus() : null;
-    }
-
-    /**
-     * 获取输出图片URL
-     */
-    public String getOutputImageUrl() {
-        if (output == null) {
-            return null;
-        }
-        
-        // 优先从outputImageUrl字段获取（图像扩展任务使用此字段）
-        if (output.getOutputImageUrl() != null) {
-            return output.getOutputImageUrl();
-        }
-        
-        // 其次从results数组获取（其他任务类型可能使用此字段）
-        if (output.getResults() != null && !output.getResults().isEmpty()) {
-            Result firstResult = output.getResults().get(0);
-            if (firstResult != null && firstResult.getUrl() != null) {
-                return firstResult.getUrl();
-            }
-        }
-        
-        return null;
-    }
-
-    /**
-     * 获取错误码
-     */
-    public String getCode() {
-        return output != null ? output.getCode() : null;
-    }
-
-    /**
-     * 获取错误信息
-     */
-    public String getMessage() {
-        return output != null ? output.getMessage() : null;
-    }
-
-    // ==================== 内部类定义 ====================
-
-    /**
-     * 输出结果对象
+     * 表示任务的输出信息
      */
     @Data
     public static class Output {
+
+        /**
+         * 任务 ID
+         */
         @JsonProperty("task_id")
-        private String taskId;           // 任务ID
+        private String taskId;
 
+        /**
+         * 任务状态
+         * <ul>
+         *     <li>PENDING：排队中</li>
+         *     <li>RUNNING：处理中</li>
+         *     <li>SUSPENDED：挂起</li>
+         *     <li>SUCCEEDED：执行成功</li>
+         *     <li>FAILED：执行失败</li>
+         *     <li>UNKNOWN：任务不存在或状态未知</li>
+         * </ul>
+         */
         @JsonProperty("task_status")
-        private TaskStatus taskStatus;   // 任务状态
+        private String taskStatus;
 
+        /**
+         * 提交时间
+         * 格式：YYYY-MM-DD HH:mm:ss.SSS
+         */
         @JsonProperty("submit_time")
-        private String submitTime;       // 任务提交时间
+        private String submitTime;
 
+        /**
+         * 调度时间
+         * 格式：YYYY-MM-DD HH:mm:ss.SSS
+         */
         @JsonProperty("scheduled_time")
-        private String scheduledTime;    // 任务调度时间
+        private String scheduledTime;
 
+        /**
+         * 结束时间
+         * 格式：YYYY-MM-DD HH:mm:ss.SSS
+         */
         @JsonProperty("end_time")
-        private String endTime;          // 任务完成时间
+        private String endTime;
 
-        private String code;             // 错误码（仅失败时返回）
-        private String message;          // 错误信息（仅失败时返回）
-
+        /**
+         * 输出图像的 URL
+         */
         @JsonProperty("output_image_url")
-        private String outputImageUrl;   // 输出图片URL（直接在output层级）
+        private String outputImageUrl;
 
-        @JsonProperty("task_metrics")
-        private TaskMetrics taskMetrics; // 任务结果统计
+        /**
+         * 接口错误码
+         * <p>接口成功请求不会返回该参数</p>
+         */
+        @JsonProperty("code")
+        private String code;
 
-        private java.util.List<Result> results; // 结果列表（某些场景可能使用）
+        /**
+         * 接口错误信息
+         * <p>接口成功请求不会返回该参数</p>
+         */
+        @JsonProperty("message")
+        private String message;
 
-        private Usage usage;             // 图像统计信息
+        /**
+         * 任务指标信息
+         */
+        private TaskMetrics taskMetrics;
     }
 
     /**
-     * 单个结果对象
-     */
-    @Data
-    public static class Result {
-        private String url;              // 图片URL
-    }
-
-    // ==================== 内部类定义 ====================
-
-    /**
-     * 任务状态枚举
-     */
-    public enum TaskStatus {
-        PENDING,    // 任务排队中
-        RUNNING,    // 任务处理中
-        SUCCEEDED,  // 任务执行成功
-        FAILED,     // 任务执行失败
-        CANCELED,   // 任务已取消
-        UNKNOWN     // 任务不存在或状态未知
-    }
-
-    /**
-     * 任务结果统计
+     * 表示任务的统计信息
      */
     @Data
     public static class TaskMetrics {
-        private Integer TOTAL;     // 总任务数
-        private Integer SUCCEEDED; // 成功任务数
-        private Integer FAILED;    // 失败任务数
-    }
 
-    /**
-     * 图像统计信息
-     */
-    @Data
-    public static class Usage {
-        @JsonProperty("image_count")
-        private Integer imageCount; // 成功生成的图片数量
+        /**
+         * 总任务数
+         */
+        @JsonProperty("TOTAL")
+        private Integer total;
+
+        /**
+         * 成功任务数
+         */
+        @JsonProperty("SUCCEEDED")
+        private Integer succeeded;
+
+        /**
+         * 失败任务数
+         */
+        @JsonProperty("FAILED")
+        private Integer failed;
     }
 }

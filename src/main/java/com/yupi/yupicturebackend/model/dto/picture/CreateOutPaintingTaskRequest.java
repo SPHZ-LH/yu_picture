@@ -82,7 +82,7 @@ public class CreateOutPaintingTaskRequest implements Serializable {
     /**
      * 是否添加水印
      */
-    private Boolean addWatermark;
+    private Boolean addWatermark = false;
 
     private static final long serialVersionUID = 1L;
 }

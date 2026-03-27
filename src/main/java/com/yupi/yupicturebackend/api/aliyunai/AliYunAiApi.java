@@ -2,17 +2,16 @@ package com.yupi.yupicturebackend.api.aliyunai;
 
 import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import cn.hutool.json.JSONUtil;
 import com.yupi.yupicturebackend.api.aliyunai.model.ImageOutPaintingRequest;
 import com.yupi.yupicturebackend.api.aliyunai.model.ImageOutPaintingResponse;
 import com.yupi.yupicturebackend.api.aliyunai.model.TaskResponse;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
+import com.yupi.yupicturebackend.model.enums.TaskStatusEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-
-import javax.annotation.Resource;
 
 /**
  * 阿里云AI API调用类
@@ -47,9 +46,6 @@ public class AliYunAiApi {
      */
     private static final int TIMEOUT = 60000;
 
-    @Resource
-    private ObjectMapper objectMapper;
-
     /**
      * 步骤1：创建图像扩展任务，获取任务ID
      *
@@ -63,10 +59,10 @@ public class AliYunAiApi {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数不能为空");
         }
 
-        // 构建请求体 - 使用Jackson来正确处理@JsonProperty注解
+        // 构建请求体 - 使用hutool的JSONUtil进行序列化
         String requestBody;
         try {
-            requestBody = objectMapper.writeValueAsString(request);
+            requestBody = JSONUtil.toJsonStr(request);
             log.info("创建图像扩展任务，请求参数: {}", requestBody);
         } catch (Exception e) {
             log.error("请求参数序列化失败", e);
@@ -93,8 +89,8 @@ public class AliYunAiApi {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "创建图像扩展任务失败");
             }
 
-            // 解析响应JSON - 使用Jackson解析
-            ImageOutPaintingResponse outPaintingResponse = objectMapper.readValue(responseBody, ImageOutPaintingResponse.class);
+            // 解析响应JSON - 使用hutool的JSONUtil解析
+            ImageOutPaintingResponse outPaintingResponse = JSONUtil.toBean(responseBody, ImageOutPaintingResponse.class);
 
             // 校验响应结果
             if (outPaintingResponse == null || outPaintingResponse.getOutput() == null) {
@@ -150,8 +146,8 @@ public class AliYunAiApi {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "查询任务结果失败");
             }
 
-            // 解析响应JSON - 使用Jackson解析
-            TaskResponse taskResponse = objectMapper.readValue(responseBody, TaskResponse.class);
+            // 解析响应JSON - 使用hutool的JSONUtil解析
+            TaskResponse taskResponse = JSONUtil.toBean(responseBody, TaskResponse.class);
 
             // 校验响应结果
             if (taskResponse == null) {
@@ -160,11 +156,9 @@ public class AliYunAiApi {
             }
 
             // 检查业务错误码
-            if (taskResponse.getCode() != null) {
-                log.error("查询任务业务异常，错误码: {}, 错误信息: {}",
-                        taskResponse.getCode(), taskResponse.getMessage());
-                throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                        "查询任务失败: " + taskResponse.getMessage());
+            if (taskResponse.getOutput().getCode() != null) {
+                log.error("查询任务业务异常，错误码: {}, 错误信息: {}", taskResponse.getOutput().getCode(), taskResponse.getOutput().getMessage());
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "查询任务失败: " + taskResponse.getOutput().getMessage());
             }
 
             return taskResponse;
@@ -189,36 +183,38 @@ public class AliYunAiApi {
 
         while (retryCount < maxRetries) {
             TaskResponse taskResponse = getTaskResult(taskId);
-            TaskResponse.TaskStatus status = taskResponse.getTaskStatus();
+            
+            // 检查响应是否有效
+            if (taskResponse.getOutput() == null) {
+                log.error("任务响应数据无效，任务ID: {}", taskId);
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务响应数据无效");
+            }
+            
+            String taskStatus = taskResponse.getOutput().getTaskStatus();
 
-            log.info("任务状态查询，任务ID: {}, 状态: {}, 重试次数: {}/{}",
-                    taskId, status, retryCount + 1, maxRetries);
+            log.info("任务状态查询，任务ID: {}, 状态: {}, 重试次数: {}/{}", taskId, taskStatus, retryCount + 1, maxRetries);
 
             // 任务成功完成
-            if (TaskResponse.TaskStatus.SUCCEEDED.equals(status)) {
-                log.info("任务执行成功，任务ID: {}, 输出图片URL: {}", taskId, taskResponse.getOutputImageUrl());
+            if (TaskStatusEnum.SUCCEEDED.name().equals(taskStatus)) {
+                String outputImageUrl = taskResponse.getOutput().getOutputImageUrl();
+                log.info("任务执行成功，任务ID: {}, 输出图片URL: {}", taskId, outputImageUrl);
                 return taskResponse;
             }
 
             // 任务失败
-            if (TaskResponse.TaskStatus.FAILED.equals(status)) {
-                log.error("任务执行失败，任务ID: {}, 错误信息: {}", taskId, taskResponse.getMessage());
-                throw new BusinessException(ErrorCode.OPERATION_ERROR, "图像扩展任务失败: " + taskResponse.getMessage());
-            }
-
-            // 任务被取消
-            if (TaskResponse.TaskStatus.CANCELED.equals(status)) {
-                log.error("任务已被取消，任务ID: {}", taskId);
-                throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务已被取消");
+            if (TaskStatusEnum.FAILED.name().equals(taskStatus)) {
+                String errorMessage = taskResponse.getOutput().getMessage();
+                log.error("任务执行失败，任务ID: {}, 错误信息: {}", taskId, errorMessage);
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "图像扩展任务失败: " + errorMessage);
             }
 
             // 任务状态未知
-            if (TaskResponse.TaskStatus.UNKNOWN.equals(status)) {
-                log.error("任务状态未知，任务ID: {}", taskId);
-                throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态未知");
+            if (TaskStatusEnum.UNKNOWN.name().equals(taskStatus)) {
+                log.error("任务不存在或状态未知，任务ID: {}", taskId);
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务不存在或状态未知");
             }
 
-            // 任务处理中或排队中，等待后重试
+            // 任务处理中或排队中（PENDING、RUNNING、SUSPENDED），等待后重试
             retryCount++;
             if (retryCount < maxRetries) {
                 try {

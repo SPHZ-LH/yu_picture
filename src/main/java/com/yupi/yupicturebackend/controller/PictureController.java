@@ -5,6 +5,8 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.yupicturebackend.annotation.AuthCheck;
+import com.yupi.yupicturebackend.api.aliyunai.model.ImageOutPaintingResponse;
+import com.yupi.yupicturebackend.api.aliyunai.model.TaskResponse;
 import com.yupi.yupicturebackend.api.imagesearch.so.SoImageSearchApiFacade;
 import com.yupi.yupicturebackend.api.imagesearch.so.model.SoImageSearchResult;
 import com.yupi.yupicturebackend.model.dto.picture.SearchPictureByPictureRequest;
@@ -360,11 +362,11 @@ public class PictureController {
      */
     @PostMapping("/out_painting/create_task")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
-    public BaseResponse<String> createOutPaintingTask(@RequestBody CreateOutPaintingTaskRequest createOutPaintingTaskRequest, HttpServletRequest request) {
+    public BaseResponse<ImageOutPaintingResponse> createOutPaintingTask(@RequestBody CreateOutPaintingTaskRequest createOutPaintingTaskRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(createOutPaintingTaskRequest == null, ErrorCode.PARAMS_ERROR, "请求参数不能为空");
         User loginUser = userService.getLoginUser(request);
-        String taskId = pictureService.createOutPaintingTask(createOutPaintingTaskRequest, loginUser);
-        return ResultUtils.success(taskId);
+        ImageOutPaintingResponse imageOutPaintingResponse = pictureService.createOutPaintingTask(createOutPaintingTaskRequest, loginUser);
+        return ResultUtils.success(imageOutPaintingResponse);
     }
 
     /**
@@ -376,10 +378,10 @@ public class PictureController {
      */
     @GetMapping("/out_painting/get_task_result")
     @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
-    public BaseResponse<String> getOutPaintingTaskResult(@RequestParam String taskId, HttpServletRequest request) {
+    public BaseResponse<TaskResponse> getOutPaintingTaskResult(@RequestParam String taskId, HttpServletRequest request) {
         ThrowUtils.throwIf(StrUtil.isBlank(taskId), ErrorCode.PARAMS_ERROR, "任务ID不能为空");
         User loginUser = userService.getLoginUser(request);
-        String imageUrl = pictureService.getOutPaintingTaskResult(taskId, loginUser);
-        return ResultUtils.success(imageUrl);
+        TaskResponse taskResponse = pictureService.getOutPaintingTaskResult(taskId, loginUser);
+        return ResultUtils.success(taskResponse);
     }
 }
