@@ -111,6 +111,10 @@ public class Picture implements Serializable {
      */
     private Date reviewTime;
 
+    /**
+     * 空间 id（为空表示公共图库）
+     */
+    private Long spaceId;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
