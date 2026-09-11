@@ -79,6 +79,16 @@ public interface UserService extends IService<User> {
     UserVO getUserVO(User user);
 
     /**
+     * 根据 id 获取用户视图（脱敏），走多级缓存。
+     * <p>
+     * 读路径：L1（本地 Caffeine）-> L2（Redis）-> 数据库，逐层回源并逐层回填。
+     *
+     * @param id 用户 id
+     * @return 用户视图；不存在时返回 null
+     */
+    UserVO getUserVOById(Long id);
+
+    /**
      * 获取用户视图列表（脱敏）
      *
      * @param userList 用户列表

@@ -6,7 +6,6 @@ import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yupi.yupicturebackend.constant.UserConstant;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
@@ -17,15 +16,19 @@ import com.yupi.yupicturebackend.model.enums.UserRoleEnum;
 import com.yupi.yupicturebackend.model.vo.LoginUserVO;
 import com.yupi.yupicturebackend.model.vo.UserVO;
 import com.yupi.yupicturebackend.service.UserService;
+import com.yupi.yupicturebackend.manager.MultiLevelCacheManager;
 import com.yupi.yupicturebackend.mapper.UserMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -35,7 +38,19 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+public class UserServiceImpl extends CacheAwareServiceImpl<UserMapper, User> implements UserService {
+
+    /**
+     * 允许排序的字段白名单（sortField 来自请求体，直接进 ORDER BY 是 SQL 注入风险点）
+     */
+    private static final Set<String> ALLOWED_SORT_FIELDS = new HashSet<>(Arrays.asList(
+            "id", "userAccount", "userName", "userProfile", "userRole",
+            "createTime", "updateTime", "editTime"));
+
+    /**
+     * 允许的排序方向
+     */
+    private static final Set<String> ALLOWED_SORT_ORDERS = new HashSet<>(Arrays.asList("ascend", "descend"));
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
@@ -168,7 +183,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         queryWrapper.like(StrUtil.isNotBlank(userAccount), "userAccount", userAccount);
         queryWrapper.like(StrUtil.isNotBlank(userName), "userName", userName);
         queryWrapper.like(StrUtil.isNotBlank(userProfile), "userProfile", userProfile);
-        queryWrapper.orderBy(StrUtil.isNotEmpty(sortField), sortOrder.equals("ascend"), sortField);
+        // 排序字段与方向必须走白名单（sortField 来自请求体，直接进 ORDER BY 是注入风险点）；
+        // 这里同时修掉了原写法中 sortOrder 为 null 时的 NPE
+        if (StrUtil.isNotEmpty(sortField)) {
+            ThrowUtils.throwIf(!ALLOWED_SORT_FIELDS.contains(sortField),
+                    ErrorCode.PARAMS_ERROR, "非法的排序字段");
+            String order = StrUtil.isNotBlank(sortOrder) ? sortOrder : "descend";
+            ThrowUtils.throwIf(!ALLOWED_SORT_ORDERS.contains(order),
+                    ErrorCode.PARAMS_ERROR, "非法的排序方式");
+            queryWrapper.orderBy(true, "ascend".equals(order), sortField);
+        }
         return queryWrapper;
     }
 
@@ -177,6 +201,44 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         LoginUserVO loginUserVO = new LoginUserVO();
         BeanUtil.copyProperties(user, loginUserVO);
         return loginUserVO;
+    }
+
+    @Override
+    public UserVO getUserVOById(Long id) {
+        if (id == null || id <= 0) {
+            return null;
+        }
+        // 缓存只存在于本方法内；回源函数由本类提供，
+        // 避免 MultiLevelCacheManager 反向依赖 Service 造成循环依赖
+        return multiLevelCacheManager.getUser(id, this::loadUserVOFromDb);
+    }
+
+    /**
+     * 从数据库回源用户视图。
+     * <p>
+     * 注意：**不要缓存本方法，也不要缓存 getById**。getById 的结果会被用于鉴权判断
+     * （见 PictureServiceImpl.uploadPicture 的「是否图片作者」校验），
+     * 把缓存埋在那层会让鉴权变成缓存依赖。详见 docs/adr/0002。
+     */
+    private UserVO loadUserVOFromDb(Long id) {
+        User user = this.getById(id);
+        return this.getUserVO(user);
+    }
+
+    // ==================== 接入缓存基类 ====================
+    // 全部写入的失效钩子都在基类 CacheAwareServiceImpl 里。这里只需告诉基类两件事：
+    // 缓存 key 是什么、失效时调哪个缓存区。
+    // 注意：本类此前**漏了 saveOrUpdate 的覆盖**（与 PictureServiceImpl 不一致），
+    // 收敛到基类后这个漂移被消除了。约定与理由见 docs/adr/0002、docs/adr/0007。
+
+    @Override
+    protected Long keyOf(User entity) {
+        return entity == null ? null : entity.getId();
+    }
+
+    @Override
+    protected void evict(Long key) {
+        multiLevelCacheManager.evictUser(key);
     }
 
     @Override

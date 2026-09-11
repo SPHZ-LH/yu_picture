@@ -7,11 +7,12 @@ import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
+import com.yupi.yupicturebackend.manager.MultiLevelCacheManager;
 import com.yupi.yupicturebackend.manager.upload.FilePictureUpload;
 import com.yupi.yupicturebackend.manager.upload.PictureUploadTemplate;
 import com.yupi.yupicturebackend.manager.upload.UrlPictureUpload;
@@ -38,7 +39,10 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,7 +55,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> implements PictureService {
+public class PictureServiceImpl extends CacheAwareServiceImpl<PictureMapper, Picture> implements PictureService {
 
     @Resource
     private UserService userService;
@@ -61,6 +65,34 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
 
     @Resource
     private UrlPictureUpload urlPictureUpload;
+
+    /**
+     * 允许排序的字段白名单。
+     * <p>
+     * sortField / sortOrder 来自请求体，直接拼进 ORDER BY 是 SQL 注入风险点，
+     * 所以必须走白名单。取值与前端 {@code yu-picture-frontend/src/constant/picture.ts}
+     * 的 PIC_SORT_FIELD_OPTIONS 保持一致。
+     * <p>
+     * 注意 {@link LambdaQueryWrapper} 的 {@code orderBy} 只接受 lambda 列引用、不接受字符串，
+     * 所以这里存的是「请求字段名 -> SFunction 列引用」的映射，而不是简单字符串集合。
+     */
+    private static final Map<String, SFunction<Picture, ?>> SORT_FIELD_MAP = new HashMap<>();
+
+    static {
+        SORT_FIELD_MAP.put("createTime", Picture::getCreateTime);
+        SORT_FIELD_MAP.put("editTime", Picture::getEditTime);
+        SORT_FIELD_MAP.put("name", Picture::getName);
+        SORT_FIELD_MAP.put("picSize", Picture::getPicSize);
+        SORT_FIELD_MAP.put("picWidth", Picture::getPicWidth);
+        SORT_FIELD_MAP.put("picHeight", Picture::getPicHeight);
+        SORT_FIELD_MAP.put("picScale", Picture::getPicScale);
+        SORT_FIELD_MAP.put("picFormat", Picture::getPicFormat);
+    }
+
+    /**
+     * 允许的排序方向
+     */
+    private static final Set<String> ALLOWED_SORT_ORDERS = new HashSet<>(Arrays.asList("ascend", "descend"));
 
     @Override
     public PictureVO uploadPicture(Object inputSoures, PictureUploadRequest pictureUploadRequest, User loginUser) {
@@ -211,9 +243,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
                 queryWrapper.like(Picture::getTags, "\"" + tag + "\"");
             }
         }
-        // SQL 语句拼接
+        // 排序字段与方向必须走白名单：它们来自请求体，直接拼进 ORDER BY 是 SQL 注入风险点
         if (ObjectUtil.isNotNull(sortField)) {
-            queryWrapper.apply("order by %s %s", sortField, sortOrder);
+            SFunction<Picture, ?> column = SORT_FIELD_MAP.get(sortField);
+            ThrowUtils.throwIf(column == null, ErrorCode.PARAMS_ERROR, "非法的排序字段");
+            String order = StrUtil.isNotBlank(sortOrder) ? sortOrder : "descend";
+            ThrowUtils.throwIf(!ALLOWED_SORT_ORDERS.contains(order),
+                    ErrorCode.PARAMS_ERROR, "非法的排序方式");
+            queryWrapper.orderBy(true, "ascend".equals(order), column);
         }
         return queryWrapper;
     }
@@ -236,6 +273,40 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
             pictureVO.setUser(userVO);
         }
         return pictureVO;
+    }
+
+    @Override
+    public PictureVO getPictureVOById(Long id) {
+        if (id == null || id <= 0) {
+            return null;
+        }
+        // 1. 图片：L1 -> L2 -> 数据库
+        Picture picture = multiLevelCacheManager.getPicture(id, this::loadPictureFromDb);
+        if (picture == null) {
+            return null;
+        }
+        // 2. 组装视图，作者信息同样走多级缓存
+        PictureVO pictureVO = PictureVO.objToVo(picture);
+        Long userId = picture.getUserId();
+        if (userId != null && userId > 0) {
+            // 跨 Bean 调用 userService，其缓存才会生效；
+            // 若写成同类内部自调用（this.xxx），会被代理绕过而静默失效
+            UserVO userVO = userService.getUserVOById(userId);
+            pictureVO.setUser(userVO);
+        }
+        return pictureVO;
+    }
+
+    /**
+     * 从数据库回源图片。
+     * <p>
+     * 注意：**不要缓存本方法，也不要缓存 getById**。getById 的结果在本类
+     * {@link #uploadPicture} 中被用于鉴权判断（「是否图片作者」），
+     * 把缓存埋在那层会让鉴权变成缓存依赖，且会污染 MyBatis-Plus 内部的调用语义。
+     * 详见 docs/adr/0002。
+     */
+    private Picture loadPictureFromDb(Long id) {
+        return this.getById(id);
     }
 
     @Override
@@ -316,6 +387,21 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture> impl
         updatePicture.setReviewTime(new Date());
         boolean result = this.updateById(updatePicture);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+    }
+
+    // ==================== 接入缓存基类 ====================
+    // 全部写入的失效钩子都在基类 CacheAwareServiceImpl 里（覆盖单条与批量写入，
+    // 并对无法按 id 失效的 wrapper 写法快速失败）。这里只需告诉基类两件事：
+    // 缓存 key 是什么、失效时调哪个缓存区。约定与理由见 docs/adr/0002、docs/adr/0007。
+
+    @Override
+    protected Long keyOf(Picture entity) {
+        return entity == null ? null : entity.getId();
+    }
+
+    @Override
+    protected void evict(Long key) {
+        multiLevelCacheManager.evictPicture(key);
     }
 
     @Override

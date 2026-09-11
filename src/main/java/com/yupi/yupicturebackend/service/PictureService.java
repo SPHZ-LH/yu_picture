@@ -55,6 +55,16 @@ public interface PictureService extends IService<Picture> {
     PictureVO getPictureVO(Picture picture);
 
     /**
+     * 根据 id 获取图片视图，走多级缓存。
+     * <p>
+     * 读路径：L1（本地 Caffeine）-> L2（Redis）-> 数据库，逐层回源并逐层回填。
+     *
+     * @param id 图片 id
+     * @return 图片视图；不存在时返回 null
+     */
+    PictureVO getPictureVOById(Long id);
+
+    /**
      * 根据图片视图获取图片
      *
      * @param pictureVO 图片视图

@@ -2,6 +2,13 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.6</version>
+        <!-- 必须为空：父 POM 来自仓库，不在上级目录 -->
+        <relativePath/>
+    </parent>
     <groupId>com.yupi</groupId>
     <artifactId>yu-picture-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
@@ -57,6 +64,21 @@
             <artifactId>jsoup</artifactId>
             <version>1.15.3</version>
         </dependency>
+        <!-- Redis 客户端（默认 Lettuce） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Lettuce 连接池 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+        <!-- 一级本地缓存：Caffeine（版本由 Spring Boot BOM 管理） -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>com.mysql</groupId>
@@ -76,17 +98,12 @@
     </dependencies>
     <dependencyManagement>
         <dependencies>
+            <!-- Spring Boot 的依赖管理由 parent（spring-boot-starter-parent）提供，
+                 这里不需要再 import spring-boot-dependencies -->
             <dependency>
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-bom</artifactId>
                 <version>3.5.9</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -111,7 +128,6 @@
                 <version>${spring-boot.version}</version>
                 <configuration>
                     <mainClass>com.yupi.yupicturebackend.YuPictureBackendApplication</mainClass>
-                    <skip>true</skip>
                 </configuration>
                 <executions>
                     <execution>
@@ -119,6 +135,10 @@
                         <goals>
                             <goal>repackage</goal>
                         </goals>
+                        <configuration>
+                            <!-- 仅跳过 repackage，保证 spring-boot:run 仍然可用 -->
+                            <skip>true</skip>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

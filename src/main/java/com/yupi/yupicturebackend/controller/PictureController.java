@@ -214,9 +214,9 @@ public class PictureController {
     public BaseResponse<PictureVO> getPictureVOById(@RequestParam long id) {
 
         ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
-        Picture picture = pictureService.getById(id);
-        ThrowUtils.throwIf(picture == null, ErrorCode.NOT_FOUND_ERROR);
-        PictureVO pictureVO = pictureService.getPictureVO(picture);
+        // 走多级缓存：L1（本地 Caffeine）-> L2（Redis）-> 数据库
+        PictureVO pictureVO = pictureService.getPictureVOById(id);
+        ThrowUtils.throwIf(pictureVO == null, ErrorCode.NOT_FOUND_ERROR);
         return ResultUtils.success(pictureVO);
 
     }

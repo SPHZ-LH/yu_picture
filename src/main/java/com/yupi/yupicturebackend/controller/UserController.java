@@ -124,15 +124,24 @@ public class UserController {
     }
 
     /**
-     * 根据 id 获取用户视图（脱敏）
+     * 根据 id 获取用户视图（脱敏）。
+     * <p>
+     * <b>本接口刻意不加 {@code @AuthCheck}（公开访问）</b>：前端用它展示任意用户的公开资料，
+     * 返回的是 {@link UserVO}（脱敏，不含密码），公开是可接受的。
+     * <p>
+     * <b>不要</b>通过调用本类里带 {@code @AuthCheck} 的方法来实现本接口——
+     * 同类自调用不经过 Spring AOP 代理，鉴权注解会被**静默绕过**，
+     * 造成「看起来需要管理员、实际任何人都能访问」的假象（本接口曾经就是这个样子）。
+     * 直接调用 service 层，让代码与实际行为保持一致。
      *
      * @param id 查询 id
      * @return 用户视图
      */
     @GetMapping("/get/vo")
     public BaseResponse<UserVO> getUserVOById(long id) {
-        BaseResponse<User> response = getUserById(id);
-        User user = response.getData();
+        ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
+        User user = userService.getById(id);
+        ThrowUtils.throwIf(user == null, ErrorCode.NOT_FOUND_ERROR);
         return ResultUtils.success(userService.getUserVO(user));
     }
 
