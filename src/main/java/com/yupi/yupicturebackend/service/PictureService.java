@@ -39,6 +39,14 @@ public interface PictureService extends IService<Picture> {
     Integer uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, User loginUser);
 
     /**
+     * 删除图片并同步扣减空间用量（逻辑删除）
+     *
+     * @param oldPicture 待删除图片
+     * @return 是否删除成功
+     */
+    boolean deletePicture(Picture oldPicture);
+
+    /**
      * 获取查询条件
      *
      * @param pictureQueryRequest 查询请求

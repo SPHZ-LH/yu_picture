@@ -17,6 +17,7 @@
             <result property="picScale" column="picScale" />
             <result property="picFormat" column="picFormat" />
             <result property="userId" column="userId" />
+            <result property="spaceId" column="spaceId" />
             <result property="createTime" column="createTime" />
             <result property="editTime" column="editTime" />
             <result property="updateTime" column="updateTime" />
@@ -26,6 +27,92 @@
     <sql id="Base_Column_List">
         id,url,name,introduction,category,tags,
         picSize,picWidth,picHeight,picScale,picFormat,
-        userId,createTime,editTime,updateTime,isDelete
+        userId,createTime,editTime,updateTime,isDelete,spaceId
     </sql>
+
+    <!-- 图库分析查询范围：spaceId 不为空则按空间过滤；queryAll 为 true 统计全空间；否则仅统计公共图库 -->
+    <sql id="analyzeScopeFilter">
+        <if test="spaceId != null">
+            AND p.spaceId = #{spaceId}
+        </if>
+        <if test="spaceId == null and !queryAll">
+            AND p.spaceId IS NULL
+        </if>
+    </sql>
+
+    <!-- 空间使用量汇总（实时聚合） -->
+    <select id="selectSpaceUsageSummary" resultType="com.yupi.yupicturebackend.model.dto.space.SpaceUsageSummary">
+        SELECT IFNULL(SUM(p.picSize), 0) AS totalSize,
+               COUNT(*)                  AS totalCount
+        FROM picture p
+        WHERE p.isDelete = 0
+        <include refid="analyzeScopeFilter"/>
+    </select>
+
+    <!-- 分类分析 -->
+    <select id="selectCategoryAnalyze" resultType="com.yupi.yupicturebackend.model.vo.SpaceCategoryAnalyzeResponse">
+        SELECT p.category               AS category,
+               COUNT(*)                 AS `count`,
+               IFNULL(SUM(p.picSize), 0) AS totalSize
+        FROM picture p
+        WHERE p.isDelete = 0
+          AND p.category IS NOT NULL
+        <include refid="analyzeScopeFilter"/>
+        GROUP BY p.category
+        ORDER BY `count` DESC, totalSize DESC
+    </select>
+
+    <!-- 标签分析：先过滤出有效 JSON 标签的图片，再用 JSON_TABLE 展开统计
+         NO_MERGE 强制派生表物化，保证 JSON_VALID 先过滤、JSON_TABLE 不会遇到非法 JSON（合并优化会导致 Incorrect arguments to JSON_TABLE） -->
+    <select id="selectTagAnalyze" resultType="com.yupi.yupicturebackend.model.vo.SpaceTagAnalyzeResponse">
+        SELECT /*+ NO_MERGE(t) */ jt.tag    AS tag,
+               COUNT(*)                     AS `count`
+        FROM (
+            SELECT p.tags
+            FROM picture p
+            WHERE p.isDelete = 0
+              AND p.tags IS NOT NULL
+              AND p.tags != ''
+              AND p.tags != '[]'
+              AND JSON_VALID(p.tags)
+            <include refid="analyzeScopeFilter"/>
+        ) t
+        JOIN JSON_TABLE(t.tags, '$[*]' COLUMNS (tag VARCHAR(128) PATH '$')) jt
+        GROUP BY jt.tag
+        ORDER BY `count` DESC
+    </select>
+
+    <!-- 大小分析：固定分档统计 -->
+    <select id="selectSizeAnalyze" resultType="com.yupi.yupicturebackend.model.vo.SpaceSizeAnalyzeResponse">
+        SELECT CASE
+                   WHEN p.picSize &lt; 102400 THEN '&lt;100KB'
+                   WHEN p.picSize &lt; 1048576 THEN '100KB-1MB'
+                   ELSE '&gt;1MB'
+               END                 AS sizeRange,
+               COUNT(*)            AS `count`,
+               SUM(p.picSize)      AS totalSize
+        FROM picture p
+        WHERE p.isDelete = 0
+        <include refid="analyzeScopeFilter"/>
+        GROUP BY sizeRange
+        ORDER BY FIELD(sizeRange, '&lt;100KB', '100KB-1MB', '&gt;1MB')
+    </select>
+
+    <!-- 上传行为分析：按时间粒度统计（dateFormat 由服务层白名单传入） -->
+    <select id="selectUploadTrendAnalyze" resultType="com.yupi.yupicturebackend.model.vo.SpaceUploadTrendAnalyzeResponse">
+        SELECT DATE_FORMAT(p.createTime, #{dateFormat}) AS timePoint,
+               COUNT(*)                                 AS `count`,
+               IFNULL(SUM(p.picSize), 0)                AS totalSize
+        FROM picture p
+        WHERE p.isDelete = 0
+        <include refid="analyzeScopeFilter"/>
+        <if test="startTime != null">
+            AND p.createTime &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND p.createTime &lt;= #{endTime}
+        </if>
+        GROUP BY timePoint
+        ORDER BY timePoint
+    </select>
 </mapper>
