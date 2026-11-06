@@ -35,3 +35,6 @@ build/
 
 ### WorkBuddy（本地智能体状态，含敏感信息，不入库） ###
 .workbuddy/
+
+### 工具缓存 ###
+.mimosa/

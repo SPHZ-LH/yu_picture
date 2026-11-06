@@ -1,9 +1,13 @@
 package com.yupi.yupicturebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.yupicturebackend.model.dto.user.UserQueryRequest;
+import com.yupi.yupicturebackend.model.dto.user.UserUpdateMyRequest;
+import com.yupi.yupicturebackend.model.dto.user.UserUpdatePasswordRequest;
 import com.yupi.yupicturebackend.model.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.yupi.yupicturebackend.model.vo.CreatorVO;
 import com.yupi.yupicturebackend.model.vo.LoginUserVO;
 import com.yupi.yupicturebackend.model.vo.UserVO;
 
@@ -110,4 +114,49 @@ public interface UserService extends IService<User> {
      * @param user 登入用户
      */
     boolean isAdmin(User user);
+
+    /**
+     * 自助修改本人资料（昵称 / 简介 / 头像），成功后回写 Session 登录态。
+     * 账号与角色不在可改范围内（DTO 中不存在这两个字段）。
+     *
+     * @param loginUser 当前登录用户
+     * @param request   修改请求
+     * @param httpRequest 前端发送的 session
+     * @return 是否成功
+     */
+    boolean updateMyProfile(User loginUser, UserUpdateMyRequest request, HttpServletRequest httpRequest);
+
+    /**
+     * 自助修改本人密码：校验旧密码后写入加盐摘要，保留当前会话。
+     *
+     * @param loginUser 当前登录用户
+     * @param request   改密码请求
+     * @return 是否成功
+     */
+    boolean updateMyPassword(User loginUser, UserUpdatePasswordRequest request);
+
+    /**
+     * 设置本周精选创作者（管理员，全站至多一位，设新人自动取代旧人）
+     *
+     * @param userId 创作者用户 id
+     * @return 是否成功
+     */
+    boolean setFeaturedCreator(Long userId);
+
+    /**
+     * 本周精选创作者（公开）：未设置时返回 null
+     *
+     * @return 创作者视图
+     */
+    UserVO getFeaturedCreator();
+
+    /**
+     * 创作者目录分页（公开）：有公开图库过审作品的用户，按人气/作品数/最新加入排序。
+     *
+     * @param current  页码
+     * @param pageSize 每页数量（上限 20）
+     * @param sortItem 排序：popular/works/newest，空与非法按 popular
+     * @return 创作者聚合视图分页
+     */
+    Page<CreatorVO> listCreators(long current, long pageSize, String sortItem);
 }

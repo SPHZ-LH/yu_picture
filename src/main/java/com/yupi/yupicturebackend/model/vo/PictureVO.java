@@ -1,6 +1,7 @@
 package com.yupi.yupicturebackend.model.vo;
 
 import cn.hutool.json.JSONUtil;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.yupi.yupicturebackend.model.entity.Picture;
 import lombok.Data;
 import org.springframework.beans.BeanUtils;
@@ -9,7 +10,14 @@ import java.io.Serializable;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * 图片视图。
+ * <p>
+ * 列表等场景只填充部分字段，未填充的字段统一不序列化，
+ * 避免响应里出现大量无意义的 null 键。
+ */
 @Data
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class PictureVO implements Serializable {
 
     /**
@@ -21,6 +29,11 @@ public class PictureVO implements Serializable {
      * 图片 url
      */
     private String url;
+
+    /**
+     * 缩略图 url（列表页展示用，历史数据可能为空，为空时前端回退原图）
+     */
+    private String thumbnailUrl;
 
     /**
      * 图片名称
@@ -66,6 +79,41 @@ public class PictureVO implements Serializable {
      * 图片格式
      */
     private String picFormat;
+
+    /**
+     * 下载量
+     */
+    private Long downloadCount;
+
+    /**
+     * 主色 hex（如 #3B82F6）
+     */
+    private String mainColor;
+
+    /**
+     * 色系：red/yellow/green/blue/purple/gray/dark/light/cream（pink 已并入 purple）
+     */
+    private String colorFamily;
+
+    /**
+     * 主色板 JSON（最多 5 个 hex，详情页「画面色彩」色点）
+     */
+    private String palette;
+
+    /**
+     * 是否编辑精选（首页「编辑精选」tab）
+     */
+    private Boolean isFeatured;
+
+    /**
+     * 是否今日一图（首页 hero）
+     */
+    private Boolean isDailyPick;
+
+    /**
+     * 收藏量
+     */
+    private Long collectCount;
 
     /**
      * 用户 id

@@ -57,6 +57,27 @@ public class PictureQueryRequest extends PageRequest implements Serializable {
     private Double picScale;
 
     /**
+     * 屏幕方向筛选：landscape-横屏（宽 >= 高，电脑壁纸）；portrait-竖屏（宽 < 高，手机壁纸）
+     */
+    private String orientation;
+
+    /**
+     * 清晰度档位下限（总像素 picWidth * picHeight >= 该值）：
+     * 1080P=921600 / 2K=2073600 / 4K=8294400 / 8K=33177600
+     */
+    private Long minPixels;
+
+    /**
+     * 色系筛选：red/yellow/green/blue/purple/gray/dark/light/cream（pink 已并入 purple）
+     */
+    private String colorFamily;
+
+    /**
+     * 是否编辑精选（首页「编辑精选」tab）；空表示不筛
+     */
+    private Boolean isFeatured;
+
+    /**
      * 图片格式
      */
     private String picFormat;

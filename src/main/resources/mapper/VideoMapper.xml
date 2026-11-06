@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yupi.yupicturebackend.mapper.VideoMapper">
+
+    <resultMap id="BaseResultMap" type="com.yupi.yupicturebackend.model.entity.Video">
+            <id property="id" column="id" />
+            <result property="url" column="url" />
+            <result property="coverUrl" column="coverUrl" />
+            <result property="name" column="name" />
+            <result property="introduction" column="introduction" />
+            <result property="category" column="category" />
+            <result property="tags" column="tags" />
+            <result property="videoSize" column="videoSize" />
+            <result property="videoWidth" column="videoWidth" />
+            <result property="videoHeight" column="videoHeight" />
+            <result property="videoScale" column="videoScale" />
+            <result property="videoDuration" column="videoDuration" />
+            <result property="videoFormat" column="videoFormat" />
+            <result property="downloadCount" column="downloadCount" />
+            <result property="userId" column="userId" />
+            <result property="spaceId" column="spaceId" />
+            <result property="reviewStatus" column="reviewStatus" />
+            <result property="reviewMessage" column="reviewMessage" />
+            <result property="reviewerId" column="reviewerId" />
+            <result property="reviewTime" column="reviewTime" />
+            <result property="createTime" column="createTime" />
+            <result property="editTime" column="editTime" />
+            <result property="updateTime" column="updateTime" />
+            <result property="isDelete" column="isDelete" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,url,coverUrl,name,introduction,category,tags,
+        videoSize,videoWidth,videoHeight,videoScale,videoDuration,videoFormat,downloadCount,
+        userId,spaceId,reviewStatus,reviewMessage,reviewerId,reviewTime,
+        createTime,editTime,updateTime,isDelete
+    </sql>
+
+    <!-- 下载量原子自增：计数更新必须在数据库侧自增，避免并发读改写丢计数 -->
+    <update id="incrementDownloadCount">
+        UPDATE video
+        SET downloadCount = downloadCount + 1
+        WHERE id = #{videoId}
+          AND isDelete = 0
+    </update>
+
+    <!-- 某用户在公共图库（spaceId IS NULL）占用的视频体积与条数，用于按用户配额校验 -->
+    <select id="selectUserPublicUsage" resultType="com.yupi.yupicturebackend.model.dto.space.SpaceUsageSummary">
+        SELECT IFNULL(SUM(v.videoSize), 0) AS totalSize,
+               COUNT(*)                     AS totalCount
+        FROM video v
+        WHERE v.isDelete = 0
+          AND v.spaceId IS NULL
+          AND v.userId = #{userId}
+    </select>
+
+</mapper>

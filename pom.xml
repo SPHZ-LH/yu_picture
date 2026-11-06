@@ -35,6 +35,12 @@
             <artifactId>cos_api</artifactId>
             <version>5.6.227</version>
         </dependency>
+        <!-- 腾讯云图像搜索（TIIA 图库接口，相似图检索引擎，见 docs/adr/0008） -->
+        <dependency>
+            <groupId>com.tencentcloudapi</groupId>
+            <artifactId>tencentcloud-sdk-java-tiia</artifactId>
+            <version>3.1.1166</version>
+        </dependency>
         <!-- 工具类：https://doc.hutool.cn/ -->
         <dependency>
             <groupId>cn.hutool</groupId>
@@ -68,6 +74,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Session 外部化：登录会话存 Redis，后端重启不再全站掉线 -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
         </dependency>
         <!-- Lettuce 连接池 -->
         <dependency>

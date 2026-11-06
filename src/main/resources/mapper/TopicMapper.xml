@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yupi.yupicturebackend.mapper.TopicMapper">
+
+    <!-- 专题列表：子查询实时计数（公共图库过审口径），专题本身逻辑删过滤。
+         计数走 topic_picture 与 picture 的 JOIN，已删/空间/未过审图不计入展示数。 -->
+    <select id="selectTopicVOList" resultType="com.yupi.yupicturebackend.model.vo.TopicVO">
+        SELECT t.id,
+               t.name,
+               t.description,
+               t.coverUrl,
+               t.category,
+               t.curatorId,
+               t.updateSchedule,
+               t.isFeatured,
+               t.createTime,
+               (SELECT COUNT(*)
+                FROM topic_picture tp
+                         JOIN picture p ON p.id = tp.pictureId
+                    AND p.isDelete = 0
+                    AND p.spaceId IS NULL
+                    AND p.reviewStatus = 1
+                WHERE tp.topicId = t.id) AS pictureCount
+        FROM topic t
+        WHERE t.isDelete = 0
+        <if test="category != null and category != ''">
+            AND t.category = #{category}
+        </if>
+        <if test="featuredOnly">
+            AND t.isFeatured = 1
+        </if>
+        ORDER BY t.isFeatured DESC, t.createTime DESC
+    </select>
+
+    <!-- 专题内图片分页：入选资格（公共图库过审图）在查询时兜底，
+         防止图片被移入空间或下架后仍留在专题页。列与收藏列表保持一致。 -->
+    <select id="selectTopicPicturePage" resultType="com.yupi.yupicturebackend.model.entity.Picture">
+        SELECT p.id,
+               p.url,
+               p.thumbnailUrl,
+               p.name,
+               p.category,
+               p.tags,
+               p.picSize,
+               p.picWidth,
+               p.picHeight,
+               p.picScale,
+               p.picFormat,
+               p.mainColor,
+               p.colorFamily,
+               p.downloadCount,
+               p.collectCount,
+               p.userId,
+               p.spaceId,
+               p.createTime
+        FROM topic_picture tp
+                 JOIN picture p ON p.id = tp.pictureId
+        WHERE tp.topicId = #{topicId}
+          AND p.isDelete = 0
+          AND p.spaceId IS NULL
+          AND p.reviewStatus = 1
+        ORDER BY tp.createTime DESC, tp.id DESC
+    </select>
+</mapper>

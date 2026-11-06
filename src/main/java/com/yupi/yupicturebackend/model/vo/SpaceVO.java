@@ -54,6 +54,22 @@ public class SpaceVO implements Serializable {
     private Long totalCount;
 
     /**
+     * 成员数量上限（含创建者）
+     */
+    private Long maxMemberCount;
+
+    /**
+     * 当前成员数量。降低上限不清退已有成员，所以这个值可能大于 maxMemberCount，前端要能显示超额
+     */
+    private Long memberCount;
+
+    /**
+     * 当前登录用户在该空间的角色（admin/editor/viewer）；非成员或未登录时为 null。
+     * 不是空间自身的属性，只在按人查询的接口里填充。
+     */
+    private String myRole;
+
+    /**
      * 创建用户 id
      */
     private Long userId;

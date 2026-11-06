@@ -21,6 +21,11 @@ public class Picture implements Serializable {
     private String url;
 
     /**
+     * 缩略图 url（上传时由数据万象生成，历史数据可能为空）
+     */
+    private String thumbnailUrl;
+
+    /**
      * 图片名称
      */
     private String name;
@@ -64,6 +69,42 @@ public class Picture implements Serializable {
      * 图片格式
      */
     private String picFormat;
+
+    /**
+     * 下载量（每次触发下载 +1，不去重）
+     */
+    private Long downloadCount;
+
+    /**
+     * 主色 hex（如 #3B82F6），上传/编辑时自动提取；提取失败为空
+     */
+    private String mainColor;
+
+    /**
+     * 色系：red/yellow/green/blue/purple/gray/dark/light/cream（见 ColorExtractor 分桶规则，
+     * 原 pink 已并入 purple）
+     */
+    private String colorFamily;
+
+    /**
+     * 主色板 JSON（最多 5 个 hex，如 ["#F2F4F5","#C3CDD3"]），上传/编辑时自动提取
+     */
+    private String palette;
+
+    /**
+     * 是否编辑精选（首页「编辑精选」tab，管理员逐张设置，不互斥）
+     */
+    private Boolean isFeatured;
+
+    /**
+     * 是否今日一图（首页 hero，管理员设置，全站至多一张）
+     */
+    private Boolean isDailyPick;
+
+    /**
+     * 收藏量（由 collect 收藏关系表增减维护，不随编辑等其它写操作变化）
+     */
+    private Long collectCount;
 
     /**
      * 创建用户 id

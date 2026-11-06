@@ -40,10 +40,11 @@ public abstract class PictureUploadTemplate {
         this.validPicture(inputSource);
 
         // 2. 图片上传地址
+        // 注意不要以 / 开头：COS 对象 key 就是 url 路径本身，带前导斜杠会迫使用 //host//key 形式的 url 才能访问
         String uuid = RandomUtil.randomString(16);
         String originFilename = this.getOriginFilename(inputSource);
         String uploadFilename = String.format("%s_%s.%s", DateUtil.formatDate(new Date()), uuid, FileUtil.getSuffix(originFilename));
-        String uploadPath = String.format("/%s/%s", uploadPathPrefix, uploadFilename);
+        String uploadPath = String.format("%s/%s", uploadPathPrefix, uploadFilename);
 
         File file = null;
         try {
@@ -58,6 +59,10 @@ public abstract class PictureUploadTemplate {
 
             // 5. 封装返回结果
             return this.buildResult(originFilename, file, uploadPath, imageInfo);
+        } catch (BusinessException e) {
+            // 下载/处理环节的业务错误（地址不合法、指向内网、超过大小上限等）原样冒出去，
+            // 被下面的兜底改写成「上传失败」会让用户无从判断该改什么
+            throw e;
         } catch (Exception e) {
             log.error("图片上传到对象存储失败", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "上传失败");
@@ -96,7 +101,12 @@ public abstract class PictureUploadTemplate {
         uploadPictureResult.setPicScale(picScale);
         uploadPictureResult.setPicFormat(imageInfo.getFormat());
         uploadPictureResult.setPicSize(FileUtil.size(file));
-        uploadPictureResult.setUrl(cosClientConfig.getHost() + "/" + uploadPath);
+        // host 与 uploadPath 都可能带多余的斜杠，统一规范化成单斜杠拼接，避免出现 //public/... 形式的 url
+        String baseUrl = cosClientConfig.getHost().replaceAll("/+$", "");
+        String objectPath = uploadPath.replaceAll("^/+", "");
+        uploadPictureResult.setUrl(baseUrl + "/" + objectPath);
+        // 缩略图路径规则见 CosManager#getThumbnailPath，与上传时的数据万象规则保持一致
+        uploadPictureResult.setThumbnailUrl(baseUrl + "/" + CosManager.getThumbnailPath(objectPath));
         return uploadPictureResult;
     }
 

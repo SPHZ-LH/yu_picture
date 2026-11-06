@@ -7,6 +7,7 @@
     <resultMap id="BaseResultMap" type="com.yupi.yupicturebackend.model.entity.Picture">
             <id property="id" column="id" />
             <result property="url" column="url" />
+            <result property="thumbnailUrl" column="thumbnailUrl" />
             <result property="name" column="name" />
             <result property="introduction" column="introduction" />
             <result property="category" column="category" />
@@ -16,6 +17,8 @@
             <result property="picHeight" column="picHeight" />
             <result property="picScale" column="picScale" />
             <result property="picFormat" column="picFormat" />
+            <result property="downloadCount" column="downloadCount" />
+            <result property="collectCount" column="collectCount" />
             <result property="userId" column="userId" />
             <result property="spaceId" column="spaceId" />
             <result property="createTime" column="createTime" />
@@ -25,10 +28,28 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,url,name,introduction,category,tags,
-        picSize,picWidth,picHeight,picScale,picFormat,
+        id,url,thumbnailUrl,name,introduction,category,tags,
+        picSize,picWidth,picHeight,picScale,picFormat,downloadCount,collectCount,
         userId,createTime,editTime,updateTime,isDelete,spaceId
     </sql>
+
+    <!-- 下载量原子自增：计数更新必须在数据库侧自增，避免并发读改写丢计数。
+         直走 mapper 而非 Service 写方法是刻意的：CacheAwareServiceImpl 对 update(Wrapper) 快速失败，
+         调用方须在写入成功后自行失效图片缓存（docs/adr/0002） -->
+    <update id="incrementDownloadCount">
+        UPDATE picture
+        SET downloadCount = downloadCount + 1
+        WHERE id = #{pictureId}
+          AND isDelete = 0
+    </update>
+
+    <!-- 收藏量原子增减：GREATEST 兜底，关系表与计数瞬时不一致时也不出现负数 -->
+    <update id="adjustCollectCount">
+        UPDATE picture
+        SET collectCount = GREATEST(collectCount + #{delta}, 0)
+        WHERE id = #{pictureId}
+          AND isDelete = 0
+    </update>
 
     <!-- 图库分析查询范围：spaceId 不为空则按空间过滤；queryAll 为 true 统计全空间；否则仅统计公共图库 -->
     <sql id="analyzeScopeFilter">
@@ -114,5 +135,31 @@
         </if>
         GROUP BY timePoint
         ORDER BY timePoint
+    </select>
+
+    <!-- 清理任务：取逻辑删除超过保留期的图片。常规 Wrapper 会被 @TableLogic 追加 isDelete = 0，
+         已删行只能走原生 SQL；updateTime 由 MP 在删除时自动填充，已删行不再更新，可当删除时刻用 -->
+    <select id="selectDeletedBefore" resultType="com.yupi.yupicturebackend.model.entity.Picture">
+        SELECT *
+        FROM picture
+        WHERE isDelete = 1
+          AND updateTime &lt; #{before}
+        ORDER BY updateTime
+        LIMIT #{limit}
+    </select>
+
+    <!-- 清理任务：COS 对象清完后物理删除图片行（removeById 是逻辑删） -->
+    <delete id="deletePhysicallyById">
+        DELETE FROM picture
+        WHERE id = #{pictureId}
+    </delete>
+    <!-- 空间成员作品数：按成员分组计数（含未过审与草稿——成员面板统计的是空间内全部占用） -->
+    <select id="selectSpaceMemberPictureCounts" resultType="com.yupi.yupicturebackend.model.dto.SpaceMemberPictureCount">
+        SELECT userId AS userId,
+               COUNT(*) AS pictureCount
+        FROM picture
+        WHERE spaceId = #{spaceId}
+          AND isDelete = 0
+        GROUP BY userId
     </select>
 </mapper>

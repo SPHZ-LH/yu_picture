@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yupi.yupicturebackend.mapper.CollectMapper">
+
+    <!-- 我的收藏列表：以 collect 为驱动表、按收藏时间排序 JOIN 图片。
+         只取列表卡片需要的列，简介等大字段不拖；reviewStatus 仅参与可见性判断，不进结果集。
+         可见性分两支：公共图库只要已过审；空间图片只要我是该空间成员，管理员放开空间限制。
+         成员关系是空间访问权的唯一依据（私有空间也有一条创建者记录），所以这里查 space_user
+         而不是 space.userId——否则团队空间里收藏的图会从我的收藏列表消失。见根 docs/adr/0002。
+         写成 choose 而不是把布尔塞进 SQL，避免依赖各驱动对 boolean 字面量的处理差异。 -->
+    <select id="selectCollectedPicturePage" resultType="com.yupi.yupicturebackend.model.entity.Picture">
+        SELECT p.id,
+               p.url,
+               p.thumbnailUrl,
+               p.name,
+               p.category,
+               p.tags,
+               p.picSize,
+               p.picWidth,
+               p.picHeight,
+               p.picScale,
+               p.picFormat,
+               p.mainColor,
+               p.colorFamily,
+               p.downloadCount,
+               p.collectCount,
+               p.userId,
+               p.spaceId,
+               p.createTime
+        FROM collect c
+                 JOIN picture p ON p.id = c.pictureId
+        WHERE c.userId = #{userId}
+          AND p.isDelete = 0
+          AND (
+            (p.spaceId IS NULL AND p.reviewStatus = 1)
+            <choose>
+                <when test="isAdmin">
+                    OR p.spaceId IS NOT NULL
+                </when>
+                <otherwise>
+                    OR (p.spaceId IS NOT NULL
+                        AND p.spaceId IN (SELECT su.spaceId FROM space_user su WHERE su.userId = #{userId}))
+                </otherwise>
+            </choose>
+            )
+        ORDER BY c.createTime DESC, c.id DESC
+    </select>
+
+    <!-- 公开收藏列表：只含公共图库过审图（空间图片无论开关都不公开），
+         供他人公开主页的「收藏」tab 使用；开关校验在服务层（owner.collectPublic） -->
+    <select id="selectPublicCollectedPicturePage" resultType="com.yupi.yupicturebackend.model.entity.Picture">
+        SELECT p.id,
+               p.url,
+               p.thumbnailUrl,
+               p.name,
+               p.category,
+               p.tags,
+               p.picSize,
+               p.picWidth,
+               p.picHeight,
+               p.picScale,
+               p.picFormat,
+               p.mainColor,
+               p.colorFamily,
+               p.downloadCount,
+               p.collectCount,
+               p.userId,
+               p.spaceId,
+               p.createTime
+        FROM collect c
+                 JOIN picture p ON p.id = c.pictureId
+        WHERE c.userId = #{userId}
+          AND p.isDelete = 0
+          AND p.spaceId IS NULL
+          AND p.reviewStatus = 1
+        ORDER BY c.createTime DESC, c.id DESC
+    </select>
+</mapper>

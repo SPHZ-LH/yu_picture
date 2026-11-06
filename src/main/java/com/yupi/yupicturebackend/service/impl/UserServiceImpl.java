@@ -5,21 +5,33 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.yupicturebackend.constant.UserConstant;
 import com.yupi.yupicturebackend.exception.BusinessException;
 import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
 import com.yupi.yupicturebackend.model.dto.user.UserQueryRequest;
+import com.yupi.yupicturebackend.model.dto.user.UserUpdateMyRequest;
+import com.yupi.yupicturebackend.model.dto.user.UserUpdatePasswordRequest;
+import com.yupi.yupicturebackend.model.dto.space.SpaceAddRequest;
 import com.yupi.yupicturebackend.model.entity.User;
+import com.yupi.yupicturebackend.model.enums.SpaceLevelEnum;
+import com.yupi.yupicturebackend.model.enums.SpaceTypeEnum;
 import com.yupi.yupicturebackend.model.enums.UserRoleEnum;
+import com.yupi.yupicturebackend.model.vo.CreatorVO;
 import com.yupi.yupicturebackend.model.vo.LoginUserVO;
 import com.yupi.yupicturebackend.model.vo.UserVO;
+import com.yupi.yupicturebackend.service.SpaceService;
+import com.yupi.yupicturebackend.service.PointsService;
 import com.yupi.yupicturebackend.service.UserService;
 import com.yupi.yupicturebackend.manager.MultiLevelCacheManager;
 import com.yupi.yupicturebackend.mapper.UserMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.DigestUtils;
 
 import javax.annotation.Resource;
@@ -41,6 +53,23 @@ import java.util.stream.Collectors;
 public class UserServiceImpl extends CacheAwareServiceImpl<UserMapper, User> implements UserService {
 
     /**
+     * 注册时自动创建的私有空间名。用户之后可以自己改（editSpace）
+     */
+    private static final String DEFAULT_PRIVATE_SPACE_NAME = "我的私有空间";
+
+    /**
+     * SpaceServiceImpl 反过来依赖 UserService（组装 SpaceVO 要查作者、判站点管理员），
+     * 直接注入会形成循环依赖，而 Boot 2.6+ 默认不允许。@Lazy 让这里先拿到代理，
+     * 真正调用时再解析目标 Bean。
+     */
+    @Lazy
+    @Resource
+    private SpaceService spaceService;
+
+    @Resource
+    private PointsService pointsService;
+
+    /**
      * 允许排序的字段白名单（sortField 来自请求体，直接进 ORDER BY 是 SQL 注入风险点）
      */
     private static final Set<String> ALLOWED_SORT_FIELDS = new HashSet<>(Arrays.asList(
@@ -53,6 +82,7 @@ public class UserServiceImpl extends CacheAwareServiceImpl<UserMapper, User> imp
     private static final Set<String> ALLOWED_SORT_ORDERS = new HashSet<>(Arrays.asList("ascend", "descend"));
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
         // 1.参数校验
         if (StrUtil.hasBlank(userAccount, userPassword, checkPassword)) {
@@ -85,7 +115,24 @@ public class UserServiceImpl extends CacheAwareServiceImpl<UserMapper, User> imp
         if (!saveResult) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "注册失败，数据库异常");
         }
+        // 注册即送一个普通版私有空间，与建用户同一事务。
+        // 必须同事务：创建入口已改成团队空间专用，私有空间只由注册产生，
+        // 一旦这里失败又不回滚，就会留下一个「没有私有空间、也没有任何自助补建入口」的用户
+        this.createDefaultPrivateSpace(user);
+        // 注册赠送积分（尽力而为，见 docs/adr/0014）：同一事务内写入，失败不回滚注册
+        pointsService.grantRegisterBonus(user.getId());
         return user.getId();
+    }
+
+    /**
+     * 为新用户建默认的私有空间（普通版配额，创建者自动成为 admin 成员）
+     */
+    private void createDefaultPrivateSpace(User user) {
+        SpaceAddRequest spaceAddRequest = new SpaceAddRequest();
+        spaceAddRequest.setSpaceName(DEFAULT_PRIVATE_SPACE_NAME);
+        spaceAddRequest.setSpaceLevel(SpaceLevelEnum.COMMON.getValue());
+        spaceAddRequest.setSpaceType(SpaceTypeEnum.PRIVATE.getValue());
+        spaceService.saveSpace(spaceAddRequest, user);
     }
 
     @Override
@@ -246,6 +293,142 @@ public class UserServiceImpl extends CacheAwareServiceImpl<UserMapper, User> imp
         return user != null && UserRoleEnum.ADMIN.getValue().equals(user.getUserRole());
     }
 
+    @Override
+    public boolean updateMyProfile(User loginUser, UserUpdateMyRequest request, HttpServletRequest httpRequest) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        String userName = request.getUserName() == null ? null : request.getUserName().trim();
+        String userProfile = request.getUserProfile() == null ? null : request.getUserProfile().trim();
+        String userAvatar = request.getUserAvatar() == null ? null : request.getUserAvatar().trim();
+        String region = request.getRegion() == null ? null : request.getRegion().trim();
+        String website = request.getWebsite() == null ? null : request.getWebsite().trim();
+        String coverUrl = request.getCoverUrl() == null ? null : request.getCoverUrl().trim();
+        Boolean collectPublic = request.getCollectPublic();
+        ThrowUtils.throwIf(userName == null && userProfile == null && userAvatar == null
+                        && collectPublic == null && region == null && website == null && coverUrl == null,
+                ErrorCode.PARAMS_ERROR, "没有需要修改的内容");
+        if (userName != null) {
+            ThrowUtils.throwIf(userName.isEmpty(), ErrorCode.PARAMS_ERROR, "昵称不能为空");
+            ThrowUtils.throwIf(userName.length() > 30, ErrorCode.PARAMS_ERROR, "昵称过长");
+        }
+        if (userProfile != null) {
+            ThrowUtils.throwIf(userProfile.length() > 200, ErrorCode.PARAMS_ERROR, "简介过长");
+        }
+        if (userAvatar != null) {
+            ThrowUtils.throwIf(userAvatar.isEmpty(), ErrorCode.PARAMS_ERROR, "头像地址不能为空");
+            ThrowUtils.throwIf(userAvatar.length() > 1024, ErrorCode.PARAMS_ERROR, "头像地址过长");
+            ThrowUtils.throwIf(!(userAvatar.startsWith("http://") || userAvatar.startsWith("https://")),
+                    ErrorCode.PARAMS_ERROR, "头像地址格式不正确");
+        }
+        if (region != null) {
+            ThrowUtils.throwIf(region.length() > 64, ErrorCode.PARAMS_ERROR, "地区过长");
+        }
+        if (website != null) {
+            ThrowUtils.throwIf(website.length() > 256, ErrorCode.PARAMS_ERROR, "网站地址过长");
+        }
+        if (coverUrl != null) {
+            ThrowUtils.throwIf(!coverUrl.isEmpty() && !(coverUrl.startsWith("http://") || coverUrl.startsWith("https://")),
+                    ErrorCode.PARAMS_ERROR, "封面地址格式不正确");
+            ThrowUtils.throwIf(coverUrl.length() > 1024, ErrorCode.PARAMS_ERROR, "封面地址过长");
+        }
+        User updateUser = new User();
+        updateUser.setId(loginUser.getId());
+        updateUser.setUserName(userName);
+        updateUser.setUserProfile(userProfile);
+        updateUser.setUserAvatar(userAvatar);
+        updateUser.setCollectPublic(collectPublic);
+        updateUser.setRegion(region);
+        updateUser.setWebsite(website);
+        updateUser.setCoverUrl(coverUrl);
+        boolean result = this.updateById(updateUser);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        // Session 里的登录态是 User 副本，不回写则头部昵称等要等到下次登录才更新
+        if (userName != null) {
+            loginUser.setUserName(userName);
+        }
+        if (userProfile != null) {
+            loginUser.setUserProfile(userProfile);
+        }
+        if (userAvatar != null) {
+            loginUser.setUserAvatar(userAvatar);
+        }
+        if (collectPublic != null) {
+            loginUser.setCollectPublic(collectPublic);
+        }
+        if (region != null) {
+            loginUser.setRegion(region);
+        }
+        if (website != null) {
+            loginUser.setWebsite(website);
+        }
+        if (coverUrl != null) {
+            loginUser.setCoverUrl(coverUrl);
+        }
+        httpRequest.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, loginUser);
+        return true;
+    }
+
+    @Override
+    public boolean updateMyPassword(User loginUser, UserUpdatePasswordRequest request) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        String oldPassword = request.getOldPassword();
+        String newPassword = request.getNewPassword();
+        ThrowUtils.throwIf(StrUtil.hasBlank(oldPassword, newPassword), ErrorCode.PARAMS_ERROR, "密码不能为空");
+        ThrowUtils.throwIf(newPassword.length() < 8, ErrorCode.PARAMS_ERROR, "密码过短");
+        ThrowUtils.throwIf(oldPassword.equals(newPassword), ErrorCode.PARAMS_ERROR, "新密码不能与旧密码相同");
+        ThrowUtils.throwIf(!getEncryptPassword(oldPassword).equals(loginUser.getUserPassword()),
+                ErrorCode.PARAMS_ERROR, "旧密码不正确");
+        User updateUser = new User();
+        updateUser.setId(loginUser.getId());
+        updateUser.setUserPassword(getEncryptPassword(newPassword));
+        boolean result = this.updateById(updateUser);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        return true;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean setFeaturedCreator(Long userId) {
+        ThrowUtils.throwIf(userId == null || userId <= 0, ErrorCode.PARAMS_ERROR);
+        User target = this.getById(userId);
+        ThrowUtils.throwIf(target == null, ErrorCode.NOT_FOUND_ERROR, "用户不存在");
+        // 逐条 updateById 而不是 update(Wrapper)：缓存失效钩子只挂在按 id 的写入上（docs/adr/0002）
+        List<User> currentPicks = this.list(new LambdaQueryWrapper<User>()
+                .eq(User::getIsFeaturedCreator, true));
+        for (User pick : currentPicks) {
+            if (!pick.getId().equals(userId)) {
+                User patch = new User();
+                patch.setId(pick.getId());
+                patch.setIsFeaturedCreator(false);
+                this.updateById(patch);
+            }
+        }
+        if (Boolean.TRUE.equals(target.getIsFeaturedCreator())) {
+            return true;
+        }
+        User patch = new User();
+        patch.setId(userId);
+        patch.setIsFeaturedCreator(true);
+        return this.updateById(patch);
+    }
+
+    @Override
+    public Page<CreatorVO> listCreators(long current, long pageSize, String sortItem) {
+        long safeCurrent = Math.max(current, 1);
+        long safePageSize = Math.min(Math.max(pageSize, 1), 20);
+        Page<CreatorVO> page = new Page<>(safeCurrent, safePageSize);
+        // MyBatis-Plus 把聚合结果填进传入的 Page 实例（mapper 方法返回 IPage）
+        baseMapper.selectCreatorPage(page, sortItem);
+        return page;
+    }
+
+    @Override
+    public UserVO getFeaturedCreator() {
+        User featuredCreator = this.getOne(new LambdaQueryWrapper<User>()
+                .eq(User::getIsFeaturedCreator, true)
+                .orderByDesc(User::getUpdateTime)
+                .last("LIMIT 1"));
+        return featuredCreator == null ? null : this.getUserVO(featuredCreator);
+    }
 }
 
 

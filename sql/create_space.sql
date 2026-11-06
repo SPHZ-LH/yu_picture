@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS space
     maxCount   bigint                                      DEFAULT 0 COMMENT '空间图片的最大数量',
     totalSize  bigint                                      DEFAULT 0 COMMENT '当前空间下图片的总大小',
     totalCount bigint                                      DEFAULT 0 COMMENT '当前空间下的图片数量',
+    maxMemberCount bigint                                  DEFAULT 0 NOT NULL COMMENT '成员数量上限（含创建者），按空间级别取默认值',
     userId     bigint                                      NOT NULL COMMENT '创建用户 id',
     createTime datetime     DEFAULT CURRENT_TIMESTAMP      NOT NULL COMMENT '创建时间',
     editTime   datetime     DEFAULT CURRENT_TIMESTAMP      NOT NULL COMMENT '编辑时间',
@@ -25,7 +26,9 @@ CREATE TABLE IF NOT EXISTS space
     INDEX idx_spaceType (spaceType)       -- 提升基于空间类型的查询性能
 ) COMMENT '空间' COLLATE = utf8mb4_unicode_ci;
 
--- 创建空间用户关联表（团队空间成员，本期仅建表预留）
+-- 创建空间用户关联表（空间成员）
+-- 成员关系是获得空间访问权的唯一依据：私有空间也有一条创建者的 admin 记录，
+-- 因此鉴权只查这张表、不按 spaceType 分支。见根 docs/adr/0002。
 CREATE TABLE IF NOT EXISTS space_user
 (
     id         bigint AUTO_INCREMENT COMMENT 'id' PRIMARY KEY,

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yupi.yupicturebackend.mapper.PictureLikeMapper">
+
+    <!-- 我的点赞列表：与收藏列表同构（可见性分支、卡片列完全一致）。
+         成员关系是空间访问权的唯一依据，所以查 space_user 而不是 space.userId。 -->
+    <select id="selectLikedPicturePage" resultType="com.yupi.yupicturebackend.model.entity.Picture">
+        SELECT p.id,
+               p.url,
+               p.thumbnailUrl,
+               p.name,
+               p.category,
+               p.tags,
+               p.picSize,
+               p.picWidth,
+               p.picHeight,
+               p.picScale,
+               p.picFormat,
+               p.mainColor,
+               p.colorFamily,
+               p.downloadCount,
+               p.collectCount,
+               p.userId,
+               p.spaceId,
+               p.createTime
+        FROM picture_like l
+                 JOIN picture p ON p.id = l.pictureId
+        WHERE l.userId = #{userId}
+          AND p.isDelete = 0
+          AND (
+            (p.spaceId IS NULL AND p.reviewStatus = 1)
+            <choose>
+                <when test="isAdmin">
+                    OR p.spaceId IS NOT NULL
+                </when>
+                <otherwise>
+                    OR (p.spaceId IS NOT NULL
+                        AND p.spaceId IN (SELECT su.spaceId FROM space_user su WHERE su.userId = #{userId}))
+                </otherwise>
+            </choose>
+            )
+        ORDER BY l.createTime DESC, l.id DESC
+    </select>
+
+    <!-- 获赞总数：名下未删除图片被点赞的次数（已发生的点赞事实，
+         不按图片当前可见性过滤——历史认可不因下架而消失） -->
+    <select id="selectReceivedLikeCount" resultType="long">
+        SELECT COUNT(*)
+        FROM picture_like l
+                 JOIN picture p ON p.id = l.pictureId
+        WHERE p.userId = #{userId}
+          AND p.isDelete = 0
+    </select>
+</mapper>

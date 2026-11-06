@@ -22,4 +22,41 @@
         id,userAccount,userPassword,userName,userAvatar,userProfile,
         userRole,editTime,createTime,updateTime,isDelete
     </sql>
+    <!-- 原子调整积分：WHERE 带余额守卫，调整后为负时影响 0 行（并发扣减下也不会透支） -->
+    <update id="adjustPoints">
+        UPDATE user
+        SET points = points + #{delta}
+        WHERE id = #{userId}
+          AND isDelete = 0
+          AND points + #{delta} >= 0
+    </update>
+    <!-- 创作者目录：只出有公开过审作品的用户；粉丝数子查询支持人气排序 -->
+    <select id="selectCreatorPage" resultType="com.yupi.yupicturebackend.model.vo.CreatorVO">
+        SELECT u.id,
+               u.userName,
+               u.userAvatar,
+               u.userProfile,
+               u.createTime,
+               COUNT(DISTINCT p.id)                                AS pictureCount,
+               COALESCE(SUM(p.downloadCount), 0)                    AS downloadCount,
+               (SELECT COUNT(*) FROM user_follow f WHERE f.followeeId = u.id) AS followerCount
+        FROM user u
+                 JOIN picture p ON p.userId = u.id
+            AND p.isDelete = 0
+            AND p.spaceId IS NULL
+            AND p.reviewStatus = 1
+        WHERE u.isDelete = 0
+        GROUP BY u.id
+        <choose>
+            <when test="sortItem == 'works'">
+                ORDER BY pictureCount DESC, u.createTime DESC
+            </when>
+            <when test="sortItem == 'newest'">
+                ORDER BY u.createTime DESC
+            </when>
+            <otherwise>
+                ORDER BY followerCount DESC, pictureCount DESC
+            </otherwise>
+        </choose>
+    </select>
 </mapper>

@@ -54,6 +54,11 @@ public class Space implements Serializable {
     private Long totalCount;
 
     /**
+     * 成员数量上限（含创建者），按空间级别取默认值
+     */
+    private Long maxMemberCount;
+
+    /**
      * 创建用户 id
      */
     private Long userId;

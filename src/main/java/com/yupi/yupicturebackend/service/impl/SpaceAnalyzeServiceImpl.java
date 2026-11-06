@@ -11,6 +11,7 @@ import com.yupi.yupicturebackend.model.dto.space.SpaceAnalyzeQueryRequest;
 import com.yupi.yupicturebackend.model.dto.space.SpaceUsageSummary;
 import com.yupi.yupicturebackend.model.entity.Space;
 import com.yupi.yupicturebackend.model.entity.User;
+import com.yupi.yupicturebackend.model.enums.SpaceRoleEnum;
 import com.yupi.yupicturebackend.model.vo.SpaceCategoryAnalyzeResponse;
 import com.yupi.yupicturebackend.model.vo.SpaceRankAnalyzeResponse;
 import com.yupi.yupicturebackend.model.vo.SpaceSizeAnalyzeResponse;
@@ -19,6 +20,7 @@ import com.yupi.yupicturebackend.model.vo.SpaceUploadTrendAnalyzeResponse;
 import com.yupi.yupicturebackend.model.vo.SpaceUsageAnalyzeResponse;
 import com.yupi.yupicturebackend.service.SpaceAnalyzeService;
 import com.yupi.yupicturebackend.service.SpaceService;
+import com.yupi.yupicturebackend.service.SpaceUserService;
 import com.yupi.yupicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,9 @@ public class SpaceAnalyzeServiceImpl implements SpaceAnalyzeService {
 
     @Resource
     private SpaceService spaceService;
+
+    @Resource
+    private SpaceUserService spaceUserService;
 
     @Resource
     private UserService userService;
@@ -150,8 +155,8 @@ public class SpaceAnalyzeServiceImpl implements SpaceAnalyzeService {
         if (querySpaceId != null) {
             Space space = spaceService.getById(querySpaceId);
             ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
-            ThrowUtils.throwIf(!space.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser),
-                    ErrorCode.NO_AUTH_ERROR, "无权限分析该空间");
+            // 分析属于管理视角的数据，只读成员与编辑者看不到
+            spaceUserService.checkPermission(space, loginUser, SpaceRoleEnum.ADMIN, "无权限分析该空间");
         } else {
             ThrowUtils.throwIf(!userService.isAdmin(loginUser), ErrorCode.NO_AUTH_ERROR, "仅管理员可分析公共图库与全空间");
         }

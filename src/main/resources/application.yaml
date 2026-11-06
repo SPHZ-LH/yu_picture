@@ -6,6 +6,10 @@ server:
 spring:
   application:
     name: yu-picture-backend
+  session:
+    # 登录会话外部化到 Redis（默认 localhost:6379）：后端重启/多实例共享会话。
+    # Redis 未启动时登录链路不可用——本机开发需要先起 redis-server
+    store-type: redis
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/yu_picture
@@ -15,7 +19,10 @@ spring:
     active: local
   servlet:
     multipart:
-          max-file-size: 10MB
+      # 视频与封面在同一次请求内提交：单 part 上限按视频 50MB 给，请求总上限再加 5MB 给封面。
+      # 放宽的是"能被接收"，图片 50MB、头像 2MB、视频 50MB 这些接口自己的业务校验仍然生效
+      max-file-size: 52MB
+      max-request-size: 58MB
 mybatis-plus:
   configuration:
     # MyBatis 配置

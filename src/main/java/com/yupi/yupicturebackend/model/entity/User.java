@@ -55,6 +55,36 @@ public class User implements Serializable {
     private String userRole;
 
     /**
+     * 积分余额
+     */
+    private Long points;
+
+    /**
+     * 收藏列表是否公开
+     */
+    private Boolean collectPublic;
+
+    /**
+     * 地区（如：四川 · 成都）
+     */
+    private String region;
+
+    /**
+     * 个人网站
+     */
+    private String website;
+
+    /**
+     * 公开主页封面 URL
+     */
+    private String coverUrl;
+
+    /**
+     * 是否本周精选创作者（全站至多一位）
+     */
+    private Boolean isFeaturedCreator;
+
+    /**
      * 编辑时间
      */
     private Date editTime;

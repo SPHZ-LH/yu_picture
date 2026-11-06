@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yupi.yupicturebackend.mapper.PictureDownloadLogMapper">
+
+    <!-- 下载榜单：窗口内按图片聚合下载次数，JOIN picture 过滤出公共图库过审图。
+         窗口为 [startTime, endTime)，榜单排序对并列下载量用 pictureId 倒序保证分页稳定。 -->
+    <select id="selectDownloadRankPage" resultType="com.yupi.yupicturebackend.model.dto.PictureDownloadStat">
+        SELECT l.pictureId AS pictureId,
+               COUNT(*)    AS downloadCount
+        FROM picture_download_log l
+                 JOIN picture p ON p.id = l.pictureId
+        WHERE l.createTime &gt;= #{startTime}
+          AND l.createTime &lt; #{endTime}
+          AND p.isDelete = 0
+          AND p.spaceId IS NULL
+          AND p.reviewStatus = 1
+        <if test="category != null and category != ''">
+            AND p.category = #{category}
+        </if>
+        GROUP BY l.pictureId
+        ORDER BY downloadCount DESC, l.pictureId DESC
+    </select>
+</mapper>

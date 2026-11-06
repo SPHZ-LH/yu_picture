@@ -1,6 +1,7 @@
 package com.yupi.yupicturebackend.controller;
 
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yupi.yupicturebackend.annotation.AuthCheck;
 import com.yupi.yupicturebackend.common.BaseResponse;
@@ -12,8 +13,14 @@ import com.yupi.yupicturebackend.exception.ErrorCode;
 import com.yupi.yupicturebackend.exception.ThrowUtils;
 import com.yupi.yupicturebackend.model.dto.user.*;
 import com.yupi.yupicturebackend.model.entity.User;
+import com.yupi.yupicturebackend.model.vo.CreatorVO;
+import com.yupi.yupicturebackend.model.vo.FollowCountVO;
+import com.yupi.yupicturebackend.model.vo.FollowStatusVO;
 import com.yupi.yupicturebackend.model.vo.LoginUserVO;
+import com.yupi.yupicturebackend.model.vo.UserPointsVO;
 import com.yupi.yupicturebackend.model.vo.UserVO;
+import com.yupi.yupicturebackend.service.PointsService;
+import com.yupi.yupicturebackend.service.UserFollowService;
 import com.yupi.yupicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -29,6 +36,10 @@ import java.util.List;
 public class UserController {
     @Resource
     private UserService userService;
+    @Resource
+    private UserFollowService userFollowService;
+    @Resource
+    private PointsService pointsService;
 
     /**
      * 用户注册
@@ -172,9 +183,42 @@ public class UserController {
         }
         User user = new User();
         BeanUtils.copyProperties(userUpdateRequest, user);
+        // 密码必须与注册/登录走同一套加盐摘要，明文入库会让该账号永远无法登录
+        if (StrUtil.isNotBlank(user.getUserPassword())) {
+            ThrowUtils.throwIf(user.getUserPassword().length() < 8, ErrorCode.PARAMS_ERROR, "密码过短");
+            user.setUserPassword(userService.getEncryptPassword(user.getUserPassword()));
+        }
         boolean result = userService.updateById(user);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
+    }
+
+    /**
+     * 自助修改本人资料（昵称 / 简介 / 头像）
+     *
+     * @param userUpdateMyRequest 修改请求
+     * @param request             前端发送的 session
+     * @return 是否成功
+     */
+    @PostMapping("/update/my")
+    public BaseResponse<Boolean> updateMyUser(@RequestBody UserUpdateMyRequest userUpdateMyRequest,
+            HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(userService.updateMyProfile(loginUser, userUpdateMyRequest, request));
+    }
+
+    /**
+     * 自助修改本人密码（校验旧密码，保留当前会话）
+     *
+     * @param userUpdatePasswordRequest 改密码请求
+     * @param request                   前端发送的 session
+     * @return 是否成功
+     */
+    @PostMapping("/update/password")
+    public BaseResponse<Boolean> updateMyPassword(@RequestBody UserUpdatePasswordRequest userUpdatePasswordRequest,
+            HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(userService.updateMyPassword(loginUser, userUpdatePasswordRequest));
     }
 
     /**
@@ -196,6 +240,131 @@ public class UserController {
         List<UserVO> userVOList = userService.getUserVOList(records);
         userVOPage.setRecords(userVOList);
         return ResultUtils.success(userVOPage);
+    }
+
+    // ==================== 关注 ====================
+
+    /**
+     * 关注用户（登录用户；不能关注自己；重复关注幂等）
+     *
+     * @param userFollowRequest 关注请求
+     * @param request           前端传来的 session
+     */
+    @PostMapping("/follow")
+    public BaseResponse<Boolean> doFollow(@RequestBody UserFollowRequest userFollowRequest,
+            HttpServletRequest request) {
+        ThrowUtils.throwIf(userFollowRequest == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(userFollowService.doFollow(userFollowRequest.getFolloweeId(), loginUser));
+    }
+
+    /**
+     * 取消关注（未关注时幂等）
+     */
+    @PostMapping("/follow/cancel")
+    public BaseResponse<Boolean> cancelFollow(@RequestBody UserFollowRequest userFollowRequest,
+            HttpServletRequest request) {
+        ThrowUtils.throwIf(userFollowRequest == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(userFollowService.cancelFollow(userFollowRequest.getFolloweeId(), loginUser));
+    }
+
+    /**
+     * 查询对某用户的关注状态与对方粉丝数（匿名可访问，未登录 followed=false）
+     *
+     * @param followeeId 被关注者 id
+     */
+    @GetMapping("/follow/status")
+    public BaseResponse<FollowStatusVO> getFollowStatus(@RequestParam("followeeId") Long followeeId,
+            HttpServletRequest request) {
+        // 状态查询不强制登录：匿名视为「未关注」（getLoginUser 未登录会抛异常，故直接取会话属性）
+        User loginUser = (User) request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
+        return ResultUtils.success(userFollowService.getFollowStatus(followeeId, loginUser));
+    }
+
+    /**
+     * 批量查询关注状态（创作者列表一次渲染全部关注按钮；匿名可访问）
+     *
+     * @param userFollowBatchRequest 用户 id 列表
+     */
+    @PostMapping("/follow/status/batch")
+    public BaseResponse<List<FollowStatusVO>> listFollowStatus(
+            @RequestBody UserFollowBatchRequest userFollowBatchRequest, HttpServletRequest request) {
+        User loginUser = (User) request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
+        return ResultUtils.success(userFollowService.listFollowStatus(
+                userFollowBatchRequest == null ? null : userFollowBatchRequest.getUserIds(), loginUser));
+    }
+
+    /**
+     * 用户关注维度计数（粉丝数 + 关注数，公开主页数据区）
+     *
+     * @param userId 用户 id
+     */
+    @GetMapping("/follow/count")
+    public BaseResponse<FollowCountVO> getFollowCounts(@RequestParam("userId") Long userId) {
+        return ResultUtils.success(userFollowService.getFollowCounts(userId));
+    }
+
+    // ==================== 精选创作者 ====================
+
+    /**
+     * 设置本周精选创作者（管理员，全站至多一位，设新人自动取代旧人）
+     */
+    @PostMapping("/featured-creator/set")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> setFeaturedCreator(
+            @RequestBody UserFeaturedCreatorRequest featuredCreatorRequest) {
+        ThrowUtils.throwIf(featuredCreatorRequest == null || featuredCreatorRequest.getUserId() == null,
+                ErrorCode.PARAMS_ERROR);
+        return ResultUtils.success(userService.setFeaturedCreator(featuredCreatorRequest.getUserId()));
+    }
+
+    /**
+     * 本周精选创作者（公开，创作者页 hero）：未设置时 data 为 null
+     */
+    @GetMapping("/featured-creator")
+    public BaseResponse<UserVO> getFeaturedCreator() {
+        return ResultUtils.success(userService.getFeaturedCreator());
+    }
+
+    /**
+     * 创作者目录分页（公开）：有公开图库过审作品的用户，可按人气/作品数/最新加入排序
+     *
+     * @param current  页码
+     * @param pageSize 每页数量
+     * @param sortItem 排序：popular/works/newest
+     */
+    @GetMapping("/creator/list")
+    public BaseResponse<Page<CreatorVO>> listCreators(
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "12") long pageSize,
+            @RequestParam(required = false) String sortItem) {
+        return ResultUtils.success(userService.listCreators(current, pageSize, sortItem));
+    }
+
+    // ==================== 积分 ====================
+
+    /**
+     * 查询我的积分余额（登录用户）
+     */
+    @GetMapping("/points/my")
+    public BaseResponse<UserPointsVO> getMyPoints(HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(pointsService.getMyPoints(loginUser));
+    }
+
+    /**
+     * 管理员调整积分（正数发放、负数扣减，调整后余额不能为负）
+     */
+    @PostMapping("/points/adjust")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> adjustPoints(@RequestBody UserPointsAdjustRequest adjustRequest,
+            HttpServletRequest request) {
+        ThrowUtils.throwIf(adjustRequest == null, ErrorCode.PARAMS_ERROR);
+        userService.getLoginUser(request);
+        pointsService.adminAdjust(adjustRequest.getUserId(),
+                adjustRequest.getDelta() == null ? 0 : adjustRequest.getDelta(), adjustRequest.getNote());
+        return ResultUtils.success(true);
     }
 
 }

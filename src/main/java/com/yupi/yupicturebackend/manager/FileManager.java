@@ -185,10 +185,11 @@ public class FileManager {
         ThrowUtils.throwIf(multipartFile == null, ErrorCode.PARAMS_ERROR, "文件不能为空");
         // 1. 校验文件大小
         long fileSize = multipartFile.getSize();
-        final long ONE_M = 1024 * 1024L;
-        ThrowUtils.throwIf(fileSize > 2 * ONE_M, ErrorCode.PARAMS_ERROR, "文件大小不能超过 2M");
-        // 2. 校验文件后缀
+        final long MAX_SIZE = 20 * 1024 * 1024L;
+        ThrowUtils.throwIf(fileSize > MAX_SIZE, ErrorCode.PARAMS_ERROR, "文件大小不能超过 20M");
+        // 2. 校验文件后缀（小写归一）
         String fileSuffix = FileUtil.getSuffix(multipartFile.getOriginalFilename());
+        fileSuffix = fileSuffix == null ? null : fileSuffix.toLowerCase();
         // 允许上传的文件后缀
         final List<String> ALLOW_FORMAT_LIST = Arrays.asList("jpeg", "jpg", "png", "webp");
         ThrowUtils.throwIf(!ALLOW_FORMAT_LIST.contains(fileSuffix), ErrorCode.PARAMS_ERROR, "文件类型错误");
@@ -232,8 +233,8 @@ public class FileManager {
             if (StrUtil.isNotBlank(contentLengthStr)) {
                 try {
                     long contentLength = Long.parseLong(contentLengthStr);
-                    final long TWO_MB = 2 * 1024 * 1024L; // 限制文件大小为 2MB
-                    ThrowUtils.throwIf(contentLength > TWO_MB, ErrorCode.PARAMS_ERROR, "文件大小不能超过 2M");
+                    final long MAX_SIZE = 20 * 1024 * 1024L; // 与图库图片上传同一条上限
+                    ThrowUtils.throwIf(contentLength > MAX_SIZE, ErrorCode.PARAMS_ERROR, "文件大小不能超过 20M");
                 } catch (NumberFormatException e) {
                     throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件大小格式错误");
                 }

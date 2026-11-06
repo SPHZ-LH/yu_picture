@@ -27,12 +27,13 @@ public class FilePictureUpload extends PictureUploadTemplate {
     protected void validPicture(Object inputSource) {
         MultipartFile multipartFile = (MultipartFile) inputSource;
         ThrowUtils.throwIf(multipartFile == null, ErrorCode.PARAMS_ERROR, "文件不能为空");
-        // 1. 校验文件大小
+        // 1. 校验文件大小（上限 50MB，与前端 PictureUpload.vue、PictureSearchConstant 三处同口径）
         long fileSize = multipartFile.getSize();
-        final long ONE_M = 1024 * 1024L;
-        ThrowUtils.throwIf(fileSize > 2 * ONE_M, ErrorCode.PARAMS_ERROR, "文件大小不能超过 2M");
-        // 2. 校验文件后缀
+        final long MAX_SIZE = 50 * 1024 * 1024L;
+        ThrowUtils.throwIf(fileSize > MAX_SIZE, ErrorCode.PARAMS_ERROR, "文件大小不能超过 50M");
+        // 2. 校验文件后缀（统一小写：.PNG / .JPG 这类大写后缀不该被无故拒绝）
         String fileSuffix = FileUtil.getSuffix(multipartFile.getOriginalFilename());
+        fileSuffix = fileSuffix == null ? null : fileSuffix.toLowerCase();
         // 允许上传的文件后缀
         final List<String> ALLOW_FORMAT_LIST = Arrays.asList("jpeg", "jpg", "png", "webp");
         ThrowUtils.throwIf(!ALLOW_FORMAT_LIST.contains(fileSuffix), ErrorCode.PARAMS_ERROR, "文件类型错误");

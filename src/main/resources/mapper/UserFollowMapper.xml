@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yupi.yupicturebackend.mapper.UserFollowMapper">
+
+    <!-- 批量粉丝数：创作者列表/关注状态批量接口一次分组查询拿全，避免逐个 COUNT -->
+    <select id="selectFollowerCounts" resultType="com.yupi.yupicturebackend.model.dto.UserFollowCount">
+        SELECT followeeId AS followeeId,
+               COUNT(*)   AS followerCount
+        FROM user_follow
+        WHERE followeeId IN
+        <foreach collection="followeeIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        GROUP BY followeeId
+    </select>
+</mapper>
