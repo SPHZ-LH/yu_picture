@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22">
+  <!-- 品牌标复刻：暗房底 + 2x2 圆角方块，右下为橙点（与 GlobalHeader logo-mark 同几何） -->
+  <rect width="22" height="22" rx="5" fill="#0d0f14"/>
+  <rect x="3" y="3" width="7" height="7" rx="2" fill="#f4f5f9"/>
+  <rect x="12" y="3" width="7" height="7" rx="2" fill="#f4f5f9"/>
+  <rect x="3" y="12" width="7" height="7" rx="2" fill="#f4f5f9"/>
+  <rect x="12" y="12" width="7" height="7" rx="2" fill="#ff6b3d"/>
+</svg>

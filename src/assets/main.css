@@ -1,0 +1,207 @@
+/**
+ * 全局样式
+ * 基础能力由 ant-design-vue/dist/reset.css 提供，此处只做站点级补充。
+ *
+ * 主题体系：默认浅色 token 服务工具页（空间 / 后台 / 上传）；
+ * 公共浏览页（首页 / 图片详情 / 搜图）由 BasicLayout 挂 .theme-gallery
+ * 切换成「暗房灯箱」暗色主题，让壁纸缩略图成为画面主角。
+ */
+
+:root {
+  /* 浅色主题（默认） */
+  --app-bg: #f5f7fa;
+  --app-panel: #ffffff;
+  --app-panel-hover: #f0f2f5;
+  --app-text: rgba(0, 0, 0, 0.88);
+  --app-text-secondary: rgba(0, 0, 0, 0.45);
+  --app-border: rgba(5, 5, 5, 0.06);
+  --app-border-strong: rgba(0, 0, 0, 0.18);
+  --app-accent: #ff6b3d;
+  --app-accent-soft: rgba(255, 107, 61, 0.12);
+  --app-radius: 14px;
+  --app-header-bg: rgba(255, 255, 255, 0.85);
+  --app-chip-bg: rgba(0, 0, 0, 0.04);
+  --app-chip-bg-hover: rgba(0, 0, 0, 0.08);
+  --app-float-shadow: 0 12px 40px rgba(15, 35, 75, 0.1);
+  /* 图片加载占位的微光渐变（ProgressiveImage 使用） */
+  --app-shimmer: linear-gradient(110deg, #eceef1 8%, #f7f8fa 18%, #eceef1 33%);
+}
+
+/* ==================== 暗色「暗房灯箱」主题（.theme-gallery 作用域内生效） ==================== */
+
+.theme-gallery {
+  --app-bg: #0d0f14;
+  --app-panel: #161a23;
+  --app-panel-hover: #1d2330;
+  --app-text: #f4f5f9;
+  --app-text-secondary: #8a93a8;
+  --app-border: rgba(244, 245, 249, 0.09);
+  --app-border-strong: rgba(244, 245, 249, 0.28);
+  --app-accent: #ff6b3d;
+  --app-accent-soft: rgba(255, 107, 61, 0.15);
+  --app-header-bg: rgba(13, 15, 20, 0.82);
+  --app-chip-bg: rgba(244, 245, 249, 0.07);
+  --app-chip-bg-hover: rgba(244, 245, 249, 0.14);
+  --app-float-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+  --app-shimmer: linear-gradient(110deg, #161a23 8%, #222836 18%, #161a23 33%);
+
+  color: var(--app-text);
+  background: var(--app-bg);
+}
+
+.theme-gallery ::selection {
+  background: rgba(255, 107, 61, 0.35);
+}
+
+/* 暗色滚动条 */
+.theme-gallery ::-webkit-scrollbar-thumb {
+  background: rgba(244, 245, 249, 0.18);
+}
+
+.theme-gallery ::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 245, 249, 0.32);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  color: var(--app-text);
+  background: var(--app-bg);
+  font-family:
+    -apple-system, 'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei UI', 'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5715;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--app-accent);
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* 键盘可达性：暗色主题下统一焦点描边 */
+.theme-gallery :focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 页面通用容器 */
+.page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 页面标题区 */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-header__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.page-header__desc {
+  margin: 4px 0 0;
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+
+/* 卡片圆角统一 */
+.ant-card {
+  border-radius: var(--app-radius);
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 上传页的左侧列：虚线上传框填满列高、提示文字垂直居中。
+   创建图片与上传动态壁纸共用同一个类，两页要改就一起改，别再各调各的。
+   ant 给 .ant-upload-drag 写了 height:100%，只要祖先链有确定高度它就会跟着长；
+   这里把这条链显式接通，而不是去猜它为什么会长。 */
+.upload-col {
+  display: flex;
+  flex-direction: column;
+  /* 实测 ant-row 不会把列拉到行高（行 627px 时列只有 177px），
+     不显式 stretch 就没有多余高度可分给上传框，提示自然也就无从居中 */
+  align-self: stretch;
+}
+
+.upload-col .picture-upload {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.upload-col .ant-upload-wrapper {
+  flex: 1 1 auto;
+}
+
+.upload-col .ant-upload-drag {
+  height: 100%;
+}
+
+/* 选择器要长过 ant 自己的 .ant-upload-wrapper .ant-upload-drag .ant-upload-btn（0,3,0），
+   且它的样式是运行时 CSS-in-JS 注入、排在 main.css 之后，同优先级会输给它。
+   真实 DOM 里三个 <p> 直接挂在 .ant-upload-btn 下（没有 .ant-upload-drag-container），
+   保持 ant 的 display:table 就会贴顶，所以这里改成 flex 并双向居中。 */
+.upload-col .ant-upload-wrapper .ant-upload-drag .ant-upload-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* 用户偏好减少动态效果时，停用站点内装饰性动画 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
